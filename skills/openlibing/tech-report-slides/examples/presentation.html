@@ -1,0 +1,1520 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>算子开发 Agent 自迭代能力验证</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #0d1117; --surface: #161b22; --surface2: #21262d; --border: #30363d;
+  --accent: #58a6ff; --accent2: #3fb950; --accent3: #f78166; --accent4: #d2a8ff;
+  --text: #e6edf3; --text-muted: #8b949e; --text-dim: #484f58;
+}
+html, body { width:100%; height:100%; font-family:-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif; background:var(--bg); color:var(--text); overflow:hidden; }
+
+/* ── DECK ── */
+.deck { width:100%; height:100vh; position:relative; }
+.slide { position:absolute; inset:0; display:flex; flex-direction:column; justify-content:center; align-items:center; padding:48px 80px; opacity:0; pointer-events:none; transition:opacity .4s ease; }
+.slide.active { opacity:1; pointer-events:auto; }
+
+/* ── NAV ── */
+.nav { position:fixed; bottom:28px; left:50%; transform:translateX(-50%); display:flex; align-items:center; gap:16px; z-index:200; background:rgba(22,27,34,.9); border:1px solid var(--border); backdrop-filter:blur(10px); padding:10px 20px; border-radius:40px; }
+.nav button { background:none; border:none; color:var(--text-muted); font-size:18px; cursor:pointer; padding:4px 8px; border-radius:6px; transition:color .2s,background .2s; }
+.nav button:hover { color:var(--accent); background:var(--surface2); }
+.nav button:disabled { opacity:.25; cursor:default; }
+.nav .counter { font-size:13px; color:var(--text-muted); min-width:52px; text-align:center; }
+.dots { display:flex; gap:6px; }
+.dot { width:7px; height:7px; border-radius:50%; background:var(--text-dim); cursor:pointer; transition:background .2s,transform .2s; }
+.dot.active { background:var(--accent); transform:scale(1.3); }
+
+/* ── TYPE ── */
+.label { font-size:11px; letter-spacing:2px; text-transform:uppercase; color:var(--text-muted); margin-bottom:16px; display:flex; align-items:center; gap:8px; }
+.label::before { content:''; display:block; width:24px; height:1px; background:var(--text-dim); }
+h1 { font-size:clamp(32px,4vw,52px); font-weight:700; line-height:1.1; letter-spacing:-1px; }
+h2 { font-size:clamp(20px,2.6vw,34px); font-weight:600; line-height:1.2; margin-bottom:22px; }
+h3 { font-size:15px; font-weight:600; color:var(--accent); margin-bottom:8px; }
+p, li { font-size:15px; line-height:1.7; color:var(--text-muted); }
+code { font-family:'JetBrains Mono','Fira Code',monospace; font-size:12px; background:var(--surface2); color:var(--accent4); padding:2px 6px; border-radius:4px; }
+
+/* ── COVER ── */
+.cover { text-align:center; }
+.kicker { display:inline-flex; align-items:center; gap:8px; font-size:12px; letter-spacing:1.5px; text-transform:uppercase; color:var(--accent); border:1px solid rgba(88,166,255,.3); background:rgba(88,166,255,.07); padding:6px 16px; border-radius:20px; margin-bottom:32px; }
+.cover h1 { max-width:820px; margin:0 auto 20px; }
+.cover h1 span { color:var(--accent); }
+.cover .sub { color:var(--text-muted); font-size:15px; margin-bottom:48px; }
+.cover .tags { display:flex; gap:12px; justify-content:center; flex-wrap:wrap; }
+.tag { font-size:12px; padding:5px 14px; border-radius:20px; border:1px solid var(--border); color:var(--text-muted); }
+.tag.green { border-color:rgba(63,185,80,.4); color:var(--accent2); background:rgba(63,185,80,.08); }
+.tag.blue  { border-color:rgba(88,166,255,.4); color:var(--accent); background:rgba(88,166,255,.08); }
+.tag.purple{ border-color:rgba(210,168,255,.4); color:var(--accent4); background:rgba(210,168,255,.08); }
+
+/* ── GRIDS / CARDS ── */
+.grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:20px; width:100%; max-width:1100px; }
+.grid-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:18px; width:100%; max-width:1100px; }
+.card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:20px; }
+.card.accent-blue  { border-color:rgba(88,166,255,.35);  background:rgba(88,166,255,.06); }
+.card.accent-green { border-color:rgba(63,185,80,.35);   background:rgba(63,185,80,.06); }
+.card.accent-purple{ border-color:rgba(210,168,255,.35); background:rgba(210,168,255,.06); }
+.card.accent-orange{ border-color:rgba(247,129,102,.35); background:rgba(247,129,102,.06); }
+.card h3 { font-size:14px; color:var(--text); margin-bottom:8px; }
+.card p, .card li { font-size:13px; color:var(--text-muted); line-height:1.6; }
+.card ul { padding-left:16px; }
+.card ul li { margin-bottom:4px; }
+.slide-inner { width:100%; max-width:1100px; }
+
+/* ── FLOW ── */
+.flow { display:flex; align-items:stretch; gap:0; width:100%; max-width:1100px; flex-wrap:nowrap; margin-bottom:16px; }
+.flow-step { flex:1; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:16px 12px; text-align:center; min-width:0; cursor:pointer; position:relative; transition:border-color .2s, background .2s, transform .15s; }
+.flow-step:hover { border-color:var(--accent); background:rgba(88,166,255,.08); transform:translateY(-2px); }
+.flow-step.gate { border-color:rgba(247,129,102,.4); background:rgba(247,129,102,.07); }
+.flow-step.gate:hover { border-color:var(--accent3); background:rgba(247,129,102,.13); }
+.flow-step .num { font-size:10px; color:var(--accent); letter-spacing:1px; margin-bottom:5px; }
+.flow-step.gate .num { color:var(--accent3); }
+.flow-step .title { font-size:12px; font-weight:600; color:var(--text); margin-bottom:3px; }
+.flow-step .desc { font-size:10px; color:var(--text-muted); line-height:1.4; }
+.flow-arrow { color:var(--text-dim); font-size:16px; padding:0 6px; flex-shrink:0; display:flex; align-items:center; }
+.expand-hint { position:absolute; bottom:6px; right:8px; font-size:9px; color:var(--text-dim); letter-spacing:.5px; }
+.flow-step:hover .expand-hint { color:var(--accent); }
+
+/* ── PHASE CARD clickable ── */
+.phase-card { cursor:pointer; transition:border-color .2s, transform .15s; position:relative; }
+.phase-card:hover { transform:translateY(-2px); }
+.phase-card.blue:hover  { border-color:var(--accent); }
+.phase-card.green:hover { border-color:var(--accent2); }
+.phase-card.orange:hover{ border-color:var(--accent3); }
+.phase-card.purple:hover{ border-color:var(--accent4); }
+
+/* ── TIMELINE ── */
+.timeline { width:100%; max-width:1000px; }
+.tl-item { display:flex; gap:18px; margin-bottom:14px; align-items:flex-start; }
+.tl-left { text-align:right; min-width:72px; padding-top:3px; }
+.tl-round { font-size:10px; font-weight:700; color:var(--accent); letter-spacing:1px; }
+.tl-dot-wrap { display:flex; flex-direction:column; align-items:center; }
+.tl-dot { width:10px; height:10px; border-radius:50%; background:var(--accent); flex-shrink:0; margin-top:4px; }
+.tl-dot.green  { background:var(--accent2); }
+.tl-dot.orange { background:var(--accent3); }
+.tl-dot.purple { background:var(--accent4); }
+.tl-line { width:1px; flex:1; background:var(--border); min-height:20px; }
+.tl-content { flex:1; cursor:pointer; background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:10px 14px; transition:border-color .2s, background .2s; }
+.tl-content:hover { border-color:var(--accent); background:rgba(88,166,255,.05); }
+.tl-title { font-size:13px; font-weight:600; color:var(--text); margin-bottom:3px; display:flex; justify-content:space-between; align-items:center; }
+.tl-desc { font-size:11px; color:var(--text-muted); }
+.tl-badge { display:inline-block; font-size:10px; padding:2px 7px; border-radius:4px; background:rgba(63,185,80,.15); color:var(--accent2); margin-left:8px; }
+.tl-badge.orange { background:rgba(247,129,102,.15); color:var(--accent3); }
+.tl-arrow { font-size:11px; color:var(--text-dim); flex-shrink:0; }
+.tl-content:hover .tl-arrow { color:var(--accent); }
+
+/* ── PERF ── */
+.perf-row { display:flex; align-items:center; gap:12px; margin-bottom:12px; }
+.perf-label { font-size:11px; color:var(--text-muted); min-width:120px; text-align:right; }
+.perf-bar-wrap { flex:1; height:20px; background:var(--surface2); border-radius:4px; overflow:hidden; }
+.perf-bar { height:100%; border-radius:4px; display:flex; align-items:center; padding-left:8px; font-size:10px; font-weight:700; font-family:monospace; white-space:nowrap; }
+.perf-bar.red    { background:rgba(247,129,102,.7); color:#fff; }
+.perf-bar.yellow { background:rgba(227,179,65,.7);  color:#fff; }
+.perf-bar.green  { background:rgba(63,185,80,.8);   color:#fff; }
+
+/* ── STATS ── */
+.stats { display:flex; gap:16px; }
+.stat { background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:14px 18px; text-align:center; flex:1; }
+.stat .val { font-size:28px; font-weight:700; font-family:monospace; color:var(--accent); }
+.stat .val.green  { color:var(--accent2); }
+.stat .val.purple { color:var(--accent4); }
+.stat .unit { font-size:11px; color:var(--text-dim); margin-top:2px; }
+
+/* ── TABLE ── */
+table { width:100%; border-collapse:collapse; font-size:12px; }
+th { background:var(--surface2); color:var(--text-muted); font-weight:600; font-size:10px; letter-spacing:1px; text-transform:uppercase; padding:9px 12px; text-align:left; border-bottom:1px solid var(--border); }
+td { padding:9px 12px; border-bottom:1px solid rgba(48,54,61,.5); color:var(--text-muted); }
+tr:last-child td { border-bottom:none; }
+.cell-ok { color:var(--accent2); font-weight:600; }
+
+/* ── CONCLUSION ── */
+.conclusion-wrap { width:100%; max-width:900px; text-align:center; }
+.big-stat { font-size:80px; font-weight:800; font-family:monospace; background:linear-gradient(135deg,var(--accent2),var(--accent)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; line-height:1; margin:24px 0 8px; }
+.quote { font-size:15px; color:var(--text-muted); max-width:680px; margin:0 auto 28px; line-height:1.7; font-style:italic; }
+.sep { width:40px; height:2px; background:var(--accent); border-radius:2px; margin:16px auto; }
+.pill { display:inline-flex; align-items:center; gap:6px; font-size:12px; padding:4px 12px; border-radius:20px; border:1px solid rgba(88,166,255,.35); color:var(--accent); background:rgba(88,166,255,.08); margin:3px; }
+.pill.green  { border-color:rgba(63,185,80,.35);   color:var(--accent2); background:rgba(63,185,80,.08); }
+.pill.purple { border-color:rgba(210,168,255,.35); color:var(--accent4); background:rgba(210,168,255,.08); }
+
+/* ── BANNER ── */
+.banner { width:100%; max-width:1100px; border-radius:10px; padding:12px 18px; display:flex; align-items:center; gap:12px; margin-top:14px; font-size:12px; color:var(--text-muted); background:rgba(210,168,255,.07); border:1px solid rgba(210,168,255,.25); }
+
+/* ── DETAIL PANEL ─────────────────────────────────────────────── */
+.detail-overlay { position:fixed; inset:0; z-index:300; pointer-events:none; }
+.detail-overlay.open { pointer-events:auto; }
+.detail-backdrop { position:absolute; inset:0; background:rgba(0,0,0,.45); opacity:0; transition:opacity .3s ease; }
+.detail-overlay.open .detail-backdrop { opacity:1; }
+.detail-panel { position:absolute; top:0; right:0; width:480px; height:100%; background:var(--surface); border-left:1px solid var(--border); display:flex; flex-direction:column; transform:translateX(100%); transition:transform .32s cubic-bezier(.22,1,.36,1); box-shadow:-8px 0 40px rgba(0,0,0,.5); }
+.detail-overlay.open .detail-panel { transform:translateX(0); }
+.detail-head { padding:20px 22px 16px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:flex-start; flex-shrink:0; }
+.detail-head-title { font-size:13px; font-weight:700; color:var(--text); line-height:1.3; }
+.detail-head-sub { font-size:11px; color:var(--text-muted); margin-top:3px; }
+.detail-close { background:none; border:none; color:var(--text-muted); font-size:18px; cursor:pointer; padding:4px; border-radius:6px; line-height:1; flex-shrink:0; transition:color .2s,background .2s; }
+.detail-close:hover { color:var(--text); background:var(--surface2); }
+.detail-body { flex:1; overflow-y:auto; padding:20px 22px; }
+.detail-body::-webkit-scrollbar { width:4px; }
+.detail-body::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+
+/* detail body styles */
+.d-section { margin-bottom:20px; }
+.d-section:last-child { margin-bottom:0; }
+.d-title { font-size:11px; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-muted); margin-bottom:10px; padding-bottom:6px; border-bottom:1px solid var(--border); }
+.d-row { display:flex; gap:10px; padding:8px 0; border-bottom:1px solid rgba(48,54,61,.4); align-items:flex-start; }
+.d-row:last-child { border-bottom:none; }
+.d-num { flex-shrink:0; width:20px; height:20px; border-radius:50%; background:var(--surface2); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; color:var(--accent); }
+.d-content { flex:1; }
+.d-name { font-size:12px; font-weight:600; color:var(--text); margin-bottom:3px; }
+.d-desc { font-size:11px; color:var(--text-muted); line-height:1.6; }
+.d-trap { font-size:10px; color:var(--accent3); background:rgba(247,129,102,.08); border:1px solid rgba(247,129,102,.2); border-radius:4px; padding:4px 8px; margin-top:5px; }
+.d-code { font-family:'JetBrains Mono','Fira Code',monospace; font-size:11px; background:rgba(13,17,23,.8); border:1px solid var(--border); border-radius:6px; padding:10px 12px; margin:8px 0; color:var(--accent4); line-height:1.7; overflow-x:auto; white-space:pre; }
+.d-check { display:flex; gap:8px; padding:6px 0; align-items:flex-start; }
+.d-check .ck { flex-shrink:0; color:var(--accent2); font-size:13px; }
+.d-check .ck.warn { color:var(--accent3); }
+.d-check p { font-size:12px; line-height:1.5; }
+.d-badge { display:inline-block; font-size:10px; padding:2px 7px; border-radius:4px; margin:2px; }
+.d-badge.blue   { background:rgba(88,166,255,.15);  color:var(--accent); }
+.d-badge.green  { background:rgba(63,185,80,.15);   color:var(--accent2); }
+.d-badge.orange { background:rgba(247,129,102,.15); color:var(--accent3); }
+.d-badge.purple { background:rgba(210,168,255,.15); color:var(--accent4); }
+.d-formula { background:var(--surface2); border-radius:6px; padding:10px 14px; font-family:monospace; font-size:11px; color:var(--accent4); line-height:1.8; margin:8px 0; }
+.d-table { width:100%; border-collapse:collapse; font-size:11px; margin:6px 0; }
+.d-table th { background:rgba(33,38,45,.8); color:var(--text-muted); padding:6px 10px; text-align:left; border-bottom:1px solid var(--border); font-size:10px; letter-spacing:.5px; }
+.d-table td { padding:6px 10px; border-bottom:1px solid rgba(48,54,61,.3); color:var(--text-muted); }
+.d-table tr:last-child td { border-bottom:none; }
+.kbd-hint { position:fixed; top:20px; right:28px; font-size:11px; color:var(--text-dim); letter-spacing:.5px; z-index:100; }
+</style>
+</head>
+<body>
+
+<!-- ── DETAIL PANEL (global) ── -->
+<div class="detail-overlay" id="detailOverlay">
+  <div class="detail-backdrop" id="detailBackdrop"></div>
+  <div class="detail-panel">
+    <div class="detail-head">
+      <div>
+        <div class="detail-head-title" id="detailTitle"></div>
+        <div class="detail-head-sub" id="detailSub"></div>
+      </div>
+      <button class="detail-close" onclick="closeDetail()">✕</button>
+    </div>
+    <div class="detail-body" id="detailBody"></div>
+  </div>
+</div>
+
+<div class="deck" id="deck">
+
+<!-- ══ SLIDE 1 · COVER ══ -->
+<div class="slide active cover">
+  <div class="kicker">🧪 实验性仓库 · KP_b016</div>
+  <h1>算子开发 <span>Agent</span> 自迭代<br>能力验证</h1>
+  <p class="sub">以 SortAgg 算子为样本，验证 Agent 驱动算子全流程开发的可行性</p>
+  <div class="tags">
+    <span class="tag blue">operator-development Skill</span>
+    <span class="tag purple">omni-performance-improvement Skill</span>
+    <span class="tag green">spark-remote-test MCP</span>
+    <span class="tag">OmniOperator + Gluten</span>
+    <span class="tag">ARM64 · 鲲鹏</span>
+  </div>
+</div>
+
+<!-- ══ SLIDE 2 · 问题与命题 ══ -->
+<div class="slide">
+  <div class="slide-inner">
+    <div class="label">背景</div>
+    <h2>算子开发为什么难以自动化？</h2>
+    <div class="grid-2">
+      <div>
+        <div class="card accent-orange">
+          <div style="font-size:28px;margin-bottom:10px">🔗</div>
+          <h3>链路长、跨仓库</h3>
+          <ul>
+            <li>Gluten Scala 开关 + Transformer</li>
+            <li>Substrait 协议转换（C++）</li>
+            <li>OmniOperator PlanNode / Factory / Operator（C++）</li>
+          </ul>
+        </div>
+        <div class="card" style="margin-top:14px">
+          <div style="font-size:28px;margin-bottom:10px">🔄</div>
+          <h3>迭代闭环依赖远端集群</h3>
+          <ul>
+            <li>ARM64 YARN 编译环境无法本地化</li>
+            <li>每次改动都需要触发远端编译 + E2E + 性能</li>
+            <li>火焰图采集、执行计划截图、ratio 计算……</li>
+          </ul>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="card accent-blue">
+          <div style="font-size:28px;margin-bottom:10px">💡</div>
+          <h3>核心命题</h3>
+          <p style="font-size:14px;color:var(--text);line-height:1.8">
+            能否让 Agent 完整驱动<br>
+            <strong style="color:var(--accent)">设计 → 实现 → 编译 → 测试 → 优化 → 交付</strong><br>
+            并在失败时自主诊断、自主迭代？
+          </p>
+        </div>
+        <div class="card accent-green">
+          <div style="font-size:28px;margin-bottom:10px">🎯</div>
+          <h3>解法思路</h3>
+          <ul>
+            <li>2 个结构化 Skill 约束工作流</li>
+            <li>1 个 MCP 工具打通远端集群操作</li>
+            <li>SortAgg 作为端到端验证样本</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SLIDE 3 · 三个核心组件 ══ -->
+<div class="slide">
+  <div class="slide-inner">
+    <div class="label">系统设计</div>
+    <h2>三个核心组件</h2>
+    <div class="grid-3">
+      <div class="card accent-blue phase-card blue" onclick="openDetail('mcp')">
+        <div style="font-size:28px;margin-bottom:10px">🔧</div>
+        <h3 style="color:var(--accent)">MCP 工具</h3>
+        <p style="font-size:11px;color:var(--text-muted);margin-bottom:8px">spark-remote-test · SSH 远端集群</p>
+        <ul>
+          <li><code>compile_omni/gluten</code></li>
+          <li><code>run_e2e_sql</code></li>
+          <li><code>run_spark_test_operator</code></li>
+          <li><code>run_spark_test_all</code></li>
+          <li><code>fetch_spark_flame_graphs</code></li>
+        </ul>
+        <div class="expand-hint">点击查看详情 →</div>
+      </div>
+      <div class="card accent-green phase-card green" onclick="openDetail('skill-op')">
+        <div style="font-size:28px;margin-bottom:10px">📋</div>
+        <h3 style="color:var(--accent2)">operator-development</h3>
+        <p style="font-size:11px;color:var(--text-muted);margin-bottom:8px">6 步强制工作流 · 卡点约束</p>
+        <ul>
+          <li>现状分析 + 三件套验证</li>
+          <li>文档卡点（实现前必须落盘）</li>
+          <li>分层实现（Gluten→Substrait→Omni）</li>
+          <li>UT + E2E + 执行计划验证</li>
+          <li>性能验收 + 交付归档</li>
+        </ul>
+        <div class="expand-hint">点击查看详情 →</div>
+      </div>
+      <div class="card accent-purple phase-card purple" onclick="openDetail('skill-perf')">
+        <div style="font-size:28px;margin-bottom:10px">📊</div>
+        <h3 style="color:var(--accent4)">omni-performance-improvement</h3>
+        <p style="font-size:11px;color:var(--text-muted);margin-bottom:8px">4 阶段 Playbook · 证据驱动</p>
+        <ul>
+          <li>Baseline → Profiling → Diagnose → Optimize</li>
+          <li>先画像后改代码（硬性规则）</li>
+          <li>优化后正确性回归验证（新增）</li>
+          <li>三方对比 + 可回退结论</li>
+          <li>有效优化沉淀 case-study</li>
+        </ul>
+        <div class="expand-hint">点击查看详情 →</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SLIDE 4 · 算子开发工作流 ══ -->
+<div class="slide">
+  <div class="slide-inner">
+    <div class="label">operator-development Skill</div>
+    <h2>6 步强制工作流 <span style="font-size:13px;color:var(--text-dim);font-weight:400">· 点击步骤查看详情</span></h2>
+    <div class="flow">
+      <div class="flow-step" onclick="openDetail('step01')">
+        <div class="num">STEP 0–1</div>
+        <div class="title">现状分析</div>
+        <div class="desc">grep + E2E<br>三件套验证</div>
+        <div class="expand-hint">↗</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step gate" onclick="openDetail('step2')">
+        <div class="num">STEP 2 · 卡点</div>
+        <div class="title">文档先行</div>
+        <div class="desc">context +<br>测试设计文档 +<br>部分UT用例</div>
+        <div class="expand-hint">↗</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step" onclick="openDetail('step3')">
+        <div class="num">STEP 3</div>
+        <div class="title">分层实现</div>
+        <div class="desc">Gluten Scala<br>Substrait C++<br>OmniOp C++</div>
+        <div class="expand-hint">↗</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step" onclick="openDetail('step4')">
+        <div class="num">STEP 4</div>
+        <div class="title">编译 + 验证</div>
+        <div class="desc">compile → UT<br>E2E → 截图</div>
+        <div class="expand-hint">↗</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step" onclick="openDetail('step5')">
+        <div class="num">STEP 5</div>
+        <div class="title">性能优化</div>
+        <div class="desc">TPC-DS 大表<br>ratio &lt; 1.0</div>
+        <div class="expand-hint">↗</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step" onclick="openDetail('step6')">
+        <div class="num">STEP 6</div>
+        <div class="title">交付归档</div>
+        <div class="desc">日志 + 火焰图<br>性能报告</div>
+        <div class="expand-hint">↗</div>
+      </div>
+    </div>
+    <div class="banner">
+      <span style="font-size:18px;flex-shrink:0">🔒</span>
+      <span><strong style="color:var(--accent4)">卡点设计哲学：</strong>通过强制文档前置、测试设计前置、部分 UT 用例先落盘等硬性规则约束 Agent 行为，而不是依赖 Agent 自律——防止跳步是 Skill 设计的核心关切。</span>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SLIDE 5 · 性能优化 Playbook ══ -->
+<div class="slide">
+  <div class="slide-inner">
+    <div class="label">omni-performance-improvement Skill</div>
+    <h2>性能优化 4 阶段 Playbook <span style="font-size:13px;color:var(--text-dim);font-weight:400">· 点击阶段查看详情</span></h2>
+    <div class="grid-2">
+      <div>
+        <div class="card phase-card blue" style="margin-bottom:12px" onclick="openDetail('phase1')">
+          <h3>Phase 1 · Baseline</h3>
+          <ul><li>SQL 设计 → E2E 验证命中 → 执行时间调校</li><li>Native / Omni 各跑 5 次（每次 1 冷 + 4 热），取 5 次均值</li><li>TPC-DS 大表（store_sales 2.87 亿行）</li></ul>
+          <div class="expand-hint">点击展开 →</div>
+        </div>
+        <div class="card phase-card blue" onclick="openDetail('phase2')">
+          <h3>Phase 2 · Profiling</h3>
+          <ul><li>async-profiler 火焰图（Omni + Native）</li><li>执行计划抓取 <code>scrape_spark_execution.py</code></li><li>Stage 级别 Duration / GC / Shuffle 分析</li></ul>
+          <div class="expand-hint">点击展开 →</div>
+        </div>
+      </div>
+      <div>
+        <div class="card phase-card orange" style="margin-bottom:12px" onclick="openDetail('phase3')">
+          <h3>Phase 3 · Diagnose</h3>
+          <ul><li>计算热点 / 内存分配 / null 低效 / 倾斜 / 锁</li><li>主瓶颈 + 次瓶颈，每个结论必须有证据</li></ul>
+          <div class="expand-hint">点击展开 →</div>
+        </div>
+        <div class="card accent-green phase-card green" onclick="openDetail('phase4')">
+          <h3>Phase 4 · Optimize + Validate</h3>
+          <ul>
+            <li>单一瓶颈对应方案，补充 UT</li>
+            <li style="color:var(--accent2)"><strong>优化后正确性验证（本次新增）</strong></li>
+            <li>三方 A/B 对比 + 可回退结论</li>
+          </ul>
+          <div class="expand-hint">点击展开 →</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SLIDE 6 · SortAgg 迭代历程 ══ -->
+<div class="slide">
+  <div style="width:100%;max-width:980px">
+    <div class="label">验证样本 · SortAgg</div>
+    <h2>Agent 自主完成的 9 轮迭代 <span style="font-size:13px;color:var(--text-dim);font-weight:400">· 点击查看细节</span></h2>
+    <div class="timeline">
+      <div class="tl-item">
+        <div class="tl-left"><span class="tl-round">A</span></div>
+        <div class="tl-dot-wrap"><div class="tl-dot"></div><div class="tl-line"></div></div>
+        <div class="tl-content" onclick="openDetail('tlA')">
+          <div class="tl-title">SortAgg 内存释放与生命周期修复 <span class="tl-arrow">›</span></div>
+          <div class="tl-desc">补齐 DestroyAggStates / ResetAggStates，解决 MEM_CAP_EXCEEDED 问题</div>
+        </div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-left"><span class="tl-round">B–D</span></div>
+        <div class="tl-dot-wrap"><div class="tl-dot"></div><div class="tl-line"></div></div>
+        <div class="tl-content" onclick="openDetail('tlBD')">
+          <div class="tl-title">ArrayType shuffle 隔离 + collect_set 快路径 + 执行计划收敛 <span class="tl-arrow">›</span></div>
+          <div class="tl-desc">关闭 Omni columnar shuffle 对 ArrayType；null 路径优化；Sort 规划稳定命中</div>
+        </div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-left"><span class="tl-round">E</span></div>
+        <div class="tl-dot-wrap"><div class="tl-dot green"></div><div class="tl-line"></div></div>
+        <div class="tl-content" onclick="openDetail('tlE')">
+          <div class="tl-title">DECIMAL64 group-by key 支持 <span class="tl-badge">类型覆盖修复</span> <span class="tl-arrow">›</span></div>
+          <div class="tl-desc">KeysEqual switch 补齐 OMNI_DECIMAL64 分支，消除高频 throw</div>
+        </div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-left"><span class="tl-round">F</span></div>
+        <div class="tl-dot-wrap"><div class="tl-dot green"></div><div class="tl-line"></div></div>
+        <div class="tl-content" onclick="openDetail('tlF')">
+          <div class="tl-title">collect_set grouped 路径 offset 修复 <span class="tl-arrow">›</span></div>
+          <div class="tl-desc">grouped UT 回归修复；CollectMetrics 容错；Fallback=0 稳定</div>
+        </div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-left"><span class="tl-round">G</span></div>
+        <div class="tl-dot-wrap"><div class="tl-dot orange"></div><div class="tl-line"></div></div>
+        <div class="tl-content" onclick="openDetail('tlG')">
+          <div class="tl-title">MakeDecimal vector path 接通，q3 从运行失败恢复为可跑 <span class="tl-badge orange">自主定位运行时错误</span> <span class="tl-arrow">›</span></div>
+          <div class="tl-desc">Runtime 报 "Vector function not found for MakeDecimal" → 接通 CastExpr vector 路径</div>
+        </div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-left"><span class="tl-round">H–I</span></div>
+        <div class="tl-dot-wrap"><div class="tl-dot purple"></div></div>
+        <div class="tl-content" onclick="openDetail('tlHI')">
+          <div class="tl-title">MakeDecimal 快路径 + raw buffer 优化 <span class="tl-arrow">›</span></div>
+          <div class="tl-desc">long→decimal64 轻量快路径；memcpy 替代逐行 GetValue/SetValue → q3 ratio 1.085 → 0.985</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SLIDE 7 · 性能结果 ══ -->
+<div class="slide">
+  <div class="slide-inner">
+    <div class="label">验证结果 · 性能</div>
+    <h2>性能优化路径：三条 SQL 全部 ratio &lt; 1.0</h2>
+    <div class="grid-2" style="align-items:start">
+      <div>
+        <h3 style="margin-bottom:12px;font-size:12px;color:var(--text-muted)">q1 场景（ss_store_sk 低基数，store_sales 2.87亿行）</h3>
+        <div class="perf-row"><span class="perf-label">初始（无优化）</span><div class="perf-bar-wrap"><div class="perf-bar red" style="width:100%">ratio 3.2</div></div></div>
+        <div class="perf-row"><span class="perf-label">Opt1 · ProcessGroup</span><div class="perf-bar-wrap"><div class="perf-bar yellow" style="width:48%">1.53</div></div><span style="font-size:10px;color:var(--text-muted)">288M→70k次</span></div>
+        <div class="perf-row"><span class="perf-label">Opt2 · 零分配比较</span><div class="perf-bar-wrap"><div class="perf-bar yellow" style="width:52%">1.65</div></div><span style="font-size:10px;color:var(--text-muted)">噪声内</span></div>
+        <div class="perf-row"><span class="perf-label">Opt3 · 批量输出</span><div class="perf-bar-wrap"><div class="perf-bar green" style="width:31%">0.993 ✅</div></div><span style="font-size:10px;color:var(--text-muted)">JNI 1000→1</span></div>
+        <div style="margin-top:18px">
+          <h3 style="margin-bottom:12px;font-size:12px;color:var(--text-muted)">q3 场景（ss_hdemo_sk 高基数 + MakeDecimal）</h3>
+          <div class="perf-row"><span class="perf-label">运行时失败</span><div class="perf-bar-wrap" style="display:flex;align-items:center;padding-left:10px"><span style="font-size:11px;color:var(--accent3)">❌ MakeDecimal 无 vector path</span></div></div>
+          <div class="perf-row"><span class="perf-label">G 轮修复后</span><div class="perf-bar-wrap"><div class="perf-bar yellow" style="width:34%">1.085</div></div></div>
+          <div class="perf-row"><span class="perf-label">H 轮快路径</span><div class="perf-bar-wrap"><div class="perf-bar yellow" style="width:32%">1.028</div></div></div>
+          <div class="perf-row"><span class="perf-label">I 轮 raw buffer</span><div class="perf-bar-wrap"><div class="perf-bar green" style="width:31%">0.985 ✅</div></div></div>
+        </div>
+      </div>
+      <div>
+        <div class="stats" style="flex-direction:column">
+          <div class="stat"><div class="val green">0.993</div><div class="unit">q1 · INT key 低基数</div></div>
+          <div class="stat"><div class="val green">0.849</div><div class="unit">q2 · VARCHAR key + JOIN</div></div>
+          <div class="stat"><div class="val green">0.985</div><div class="unit">q3 · INT key 高基数（纯代码）</div></div>
+        </div>
+        <div class="card" style="margin-top:14px">
+          <h3>测试环境</h3>
+          <ul>
+            <li>TPC-DS SF100 · store_sales 约 2.87 亿行</li>
+            <li>YARN · 34 executor × 8 cores · ARM64 鲲鹏</li>
+            <li>每轮 5 次测量（每次 1冷+4热），取 5 次均值 ratio</li>
+            <li>三方对比：Native / Omni-Before / Omni-After</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SLIDE 8 · 三条 SQL 对比 + E2E 验证 ══ -->
+<div class="slide">
+  <div class="slide-inner">
+    <div class="label">验证证据</div>
+    <h2>三条 SQL 完整对比 + E2E 正确性验证</h2>
+    <div class="grid-2" style="align-items:start">
+      <div>
+        <h3 style="margin-bottom:10px;font-size:12px;color:var(--text-muted)">三条 SQL 最终性能（优化后 · force.hashagg=false 确认走 SortAgg · 5 次测量均值）</h3>
+        <table>
+          <thead><tr><th>SQL</th><th>场景</th><th>Native avg</th><th>Omni avg</th><th>ratio</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><strong style="color:var(--text)">q1</strong></td>
+              <td>INT key · 低基数 ~1K组</td>
+              <td style="font-family:monospace">8.299s</td>
+              <td style="font-family:monospace;color:var(--accent2)">8.238s</td>
+              <td class="cell-ok">0.993</td>
+            </tr>
+            <tr>
+              <td><strong style="color:var(--text)">q2</strong></td>
+              <td>VARCHAR key · JOIN ~250组</td>
+              <td style="font-family:monospace">11.635s</td>
+              <td style="font-family:monospace;color:var(--accent2)">9.873s</td>
+              <td class="cell-ok">0.849</td>
+            </tr>
+            <tr>
+              <td><strong style="color:var(--text)">q3</strong></td>
+              <td>INT key · 高基数 ~7200组</td>
+              <td style="font-family:monospace">49.171s</td>
+              <td style="font-family:monospace;color:var(--accent2)">48.429s</td>
+              <td class="cell-ok">0.985</td>
+            </tr>
+            <tr style="border-top:2px solid var(--border)">
+              <td colspan="2" style="font-weight:600;color:var(--accent2)">综合 ratio（q1+q2+q3）</td>
+              <td style="font-family:monospace">69.105s</td>
+              <td style="font-family:monospace;color:var(--accent2)">66.540s</td>
+              <td class="cell-ok">0.963</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="card" style="margin-top:12px">
+          <h3 style="margin-bottom:8px">热跑 ratio（补充口径）</h3>
+          <p style="font-size:11px;color:var(--text-muted);line-height:1.7">补充展示三条 SQL 的热跑表现。q1 / q2 按“1 冷 + 4 热”中的后 4 次热跑求均值；q3 保留已有专项热跑日志结果：</p>
+          <table style="font-size:11px;margin-top:8px">
+            <thead><tr><th>SQL</th><th>Omni 热跑均值</th><th>Native 热跑均值</th><th>hot ratio</th></tr></thead>
+            <tbody>
+              <tr>
+                <td>q1</td>
+                <td style="font-family:'JetBrains Mono',monospace;color:var(--accent2)">3.659s</td>
+                <td style="font-family:'JetBrains Mono',monospace">5.584s</td>
+                <td class="cell-ok">0.655</td>
+              </tr>
+              <tr>
+                <td>q2</td>
+                <td style="font-family:'JetBrains Mono',monospace;color:var(--accent2)">5.424s</td>
+                <td style="font-family:'JetBrains Mono',monospace">8.856s</td>
+                <td class="cell-ok">0.612</td>
+              </tr>
+              <tr>
+                <td>q3</td>
+                <td style="font-family:'JetBrains Mono',monospace;color:var(--accent2)">43.805s</td>
+                <td style="font-family:'JetBrains Mono',monospace">44.278s</td>
+                <td class="cell-ok">0.989</td>
+              </tr>
+              <tr style="border-top:2px solid var(--border)">
+                <td style="font-weight:600;color:var(--accent2)">综合 hot ratio</td>
+                <td style="font-family:'JetBrains Mono',monospace;color:var(--accent2)">52.888s</td>
+                <td style="font-family:'JetBrains Mono',monospace">58.718s</td>
+                <td class="cell-ok">0.901</td>
+              </tr>
+            </tbody>
+          </table>
+          <p style="font-size:10px;color:var(--text-dim);margin-top:6px">来源：q1 对应 <code>perf_omni_20260401-091633.log</code> / <code>perf_native_20260401-091809.log</code>；q2 对应 <code>perf_omni_20260401-091946.log</code> / <code>perf_native_20260401-092142.log</code>；q3 对应 <code>perf_omni_20260331-203453.log</code> / <code>perf_native_20260331-203737.log</code></p>
+        </div>
+        <div style="margin-top:14px">
+          <h3 style="margin-bottom:8px;font-size:12px;color:var(--text-muted)">E2E 正确性验证（优化后 · Native vs Omni 逐行对比）</h3>
+          <table>
+            <thead><tr><th>SQL</th><th>SortAgg 命中</th><th>Fallback</th><th>结果一致</th></tr></thead>
+            <tbody>
+              <tr><td>q1</td><td style="color:var(--accent2)">×4</td><td class="cell-ok">0</td><td class="cell-ok">10行一致</td></tr>
+              <tr><td>q2</td><td style="color:var(--accent2)">×4 + BHJ ×2</td><td class="cell-ok">0</td><td class="cell-ok">10行一致</td></tr>
+              <tr><td>q3</td><td style="color:var(--accent2)">×4</td><td class="cell-ok">0</td><td class="cell-ok">10行一致</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div>
+        <div class="card accent-blue" style="margin-bottom:12px">
+          <h3 style="color:var(--accent)">执行计划与日志对应关系</h3>
+          <p style="font-size:11px;color:var(--text-muted);margin-bottom:8px">App ID、History Server 和本地归档日志一一对应：</p>
+          <table style="font-size:11px">
+            <thead><tr><th>SQL</th><th>Omni App ID</th><th>Native App ID</th><th>Omni 日志</th><th>Native 日志</th></tr></thead>
+            <tbody>
+              <tr><td style="color:var(--text)">q1</td>
+                <td><a href="http://173.50.1.2:18080/history/local-1774963186870/SQL/" target="_blank" style="color:var(--accent);text-decoration:none">local-1774963186870</a></td>
+                <td><a href="http://173.50.1.2:18080/history/local-1774963173419/SQL/" target="_blank" style="color:var(--text-muted);text-decoration:none">local-1774963173419</a></td>
+                <td><code>e2e_sql_20260331-211732.log</code></td>
+                <td><code>e2e_sql_native_20260331-211719.log</code></td>
+              </tr>
+              <tr><td style="color:var(--text)">q2</td>
+                <td><a href="http://173.50.1.2:18080/history/local-1774962834752/SQL/" target="_blank" style="color:var(--accent);text-decoration:none">local-1774962834752</a></td>
+                <td><a href="http://173.50.1.2:18080/history/local-1774962823518/SQL/" target="_blank" style="color:var(--text-muted);text-decoration:none">local-1774962823518</a></td>
+                <td><code>e2e_sql_20260331-211140.log</code></td>
+                <td><code>e2e_sql_native_20260331-211129.log</code></td>
+              </tr>
+              <tr><td style="color:var(--text)">q3</td>
+                <td><a href="http://173.50.1.2:18080/history/local-1774962951641/SQL/" target="_blank" style="color:var(--accent);text-decoration:none">local-1774962951641</a></td>
+                <td><a href="http://173.50.1.2:18080/history/local-1774962952076/SQL/" target="_blank" style="color:var(--text-muted);text-decoration:none">local-1774962952076</a></td>
+                <td><code>e2e_sql_20260331-211337.log</code></td>
+                <td><code>e2e_sql_native_20260331-211338.log</code></td>
+              </tr>
+            </tbody>
+          </table>
+          <p style="font-size:10px;color:var(--text-dim);margin-top:8px">说明：本页 App ID 对应的是性能后 E2E 校验执行 ID；性能日志单独归档在 <code>artifacts/logs_20260331/perf_*.log</code>。</p>
+        </div>
+        <div class="card" style="margin-bottom:12px" onclick="openDetail('e2e-log')" style="cursor:pointer">
+          <h3>E2E 日志摘录（q1 Omni）</h3>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--accent4);line-height:1.6;overflow-x:auto;white-space:pre;max-height:120px;overflow-y:auto">NULL	204000	12950651	245184922.72
+1	201285	1360964	50348881.10
+2	201367	1367762	50548614.84
+4	201333	1364773	50460104.94
+7	201252	1362266	50419772.38
+...
+Time taken: 17.256 seconds, Fetched 10 row(s)</div>
+          <p style="font-size:10px;color:var(--text-dim);margin-top:6px">Native 输出完全一致 · <span style="cursor:pointer;color:var(--accent)" onclick="openDetail('e2e-log')">点击查看完整日志 →</span></p>
+        </div>
+        <div class="card accent-green">
+          <h3 style="color:var(--accent2)">验证结论</h3>
+          <ul>
+            <li>三条 SQL 均命中 <code>OmniSortAggregateExecTransformer</code></li>
+            <li>Fallback 告警仅 Exchange / TakeOrdered（预期内）</li>
+            <li>Native vs Omni 查询结果逐行一致</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SLIDE 9 · 自迭代能力 ══ -->
+
+<div class="slide">
+  <div class="slide-inner">
+    <div class="label">能力验证</div>
+    <h2>自迭代能力的四个具体体现</h2>
+    <div class="grid-2">
+      <div class="card accent-blue">
+        <div style="font-size:26px;margin-bottom:10px">🔁</div>
+        <h3 style="color:var(--accent)">失败自愈</h3>
+        <p>compile_omni 失败 → 读编译错误 → 定位问题 → 修改代码 → 重编译；q3 运行期报 MakeDecimal not found → 定位 vector path 缺失 → 三轮递进修复</p>
+      </div>
+      <div class="card accent-green">
+        <div style="font-size:26px;margin-bottom:10px">📈</div>
+        <h3 style="color:var(--accent2)">证据驱动决策</h3>
+        <p>每次性能优化前必须先采集火焰图；Opt3 关键突破（JNI 1000→1次）来自火焰图中 GetOutput 热点，而非猜测。硬性规则：没有画像不允许改代码。</p>
+      </div>
+      <div class="card accent-purple">
+        <div style="font-size:26px;margin-bottom:10px">📄</div>
+        <h3 style="color:var(--accent4)">跨轮次记忆</h3>
+        <p>每轮迭代的中间数据、当前 ratio、下一步方向全部通过文档持久化（modification_trace、perf report）。不依赖上下文窗口，状态显式管理。</p>
+      </div>
+      <div class="card accent-orange">
+        <div style="font-size:26px;margin-bottom:10px">🔒</div>
+        <h3 style="color:var(--accent3)">卡点有效性</h3>
+        <p>Skill 中的强制文档卡点被实际遵守：context_sortagg.md 与 self_validation_sortagg.md 先于任何实现代码存在且内容完整。卡点不是建议，是约束。</p>
+      </div>
+    </div>
+    <div class="banner" style="margin-top:18px">
+      <span style="font-size:18px;flex-shrink:0">✅</span>
+      <span>全程 Agent 自主完成 <strong style="color:var(--text)">A–I 共 9 轮迭代</strong>，涵盖功能修复、类型覆盖、运行时 Bug、性能优化，<strong style="color:var(--accent2)">无人工介入</strong></span>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SLIDE 10 · 交付物 ══ -->
+<div class="slide">
+  <div class="slide-inner">
+    <div class="label">交付完整性</div>
+    <h2>SortAgg 交付物清单</h2>
+    <div class="grid-2" style="align-items:start">
+      <div>
+        <table>
+          <thead><tr><th>交付项</th><th>状态</th></tr></thead>
+          <tbody>
+            <tr><td>需求设计文档 context_sortagg.md</td><td class="cell-ok">✅ 完成</td></tr>
+            <tr><td>测试设计文档 self_validation_sortagg.md</td><td class="cell-ok">✅ 完成</td></tr>
+            <tr><td>Gluten Scala 实现</td><td class="cell-ok">✅ 完成</td></tr>
+            <tr><td>OmniOperator C++ 实现</td><td class="cell-ok">✅ 完成</td></tr>
+            <tr><td>UT 编译通过（8541 tests）</td><td class="cell-ok">✅ 12 个 SortAgg UT 全通</td></tr>
+            <tr><td>E2E 验证（Fallback=0）</td><td class="cell-ok">✅ ×4 命中</td></tr>
+            <tr><td>性能优化报告（3 轮 + q3 专项）</td><td class="cell-ok">✅ 完成</td></tr>
+            <tr><td>火焰图归档（before/after/opt3）</td><td class="cell-ok">✅ 完成</td></tr>
+            <tr><td>编译 / E2E / 性能日志全量归档</td><td class="cell-ok">✅ 完成</td></tr>
+            <tr><td>修改追踪记录（A–I 轮）</td><td class="cell-ok">✅ 完成</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <div class="card" style="margin-bottom:14px">
+          <h3>功能覆盖亮点</h3>
+          <ul>
+            <li>PARTIAL / FINAL / SINGLE / COMPLETE 全覆盖</li>
+            <li>collect_set / collect_list / COUNT / SUM / AVG / MIN / MAX</li>
+            <li>NULL key 语义、无 GROUP BY、跨 batch 边界、Aggregate Filter</li>
+            <li>Group-by key 类型：16 种（含 DECIMAL64 修复）</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>已知遗留 Gap（诚实列出）</h3>
+          <ul>
+            <li>collect_set(MAP 元素) — 实现复杂度高</li>
+            <li>Spill 路径未专项验证</li>
+            <li>复杂类型 ARRAY/ROW 作为 group-by key</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SLIDE 11 · 结论 ══ -->
+<div class="slide">
+  <div class="conclusion-wrap">
+    <div class="label" style="justify-content:center">结论</div>
+    <div style="display:flex;gap:24px;justify-content:center;margin:24px 0 12px">
+      <div style="text-align:center">
+        <div style="font-size:48px;font-weight:800;font-family:monospace;color:var(--accent2);line-height:1">0.993</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px">q1 · INT 低基数</div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:48px;font-weight:800;font-family:monospace;color:var(--accent2);line-height:1">0.849</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px">q2 · VARCHAR + JOIN</div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:48px;font-weight:800;font-family:monospace;color:var(--accent2);line-height:1">0.985</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px">q3 · INT 高基数</div>
+      </div>
+    </div>
+    <p style="font-size:13px;color:var(--text-dim);margin-bottom:20px">latency_ratio = Omni_avg / Native_avg &nbsp;·&nbsp; &lt;1.0 = Omni 更快 &nbsp;·&nbsp; 综合 ratio = 0.963</p>
+    <p class="quote">「这套系统验证了 Agent 在算子开发领域具备从零到交付、从失败到自愈、从不可跑到达标的完整迭代能力。<br>SortAgg 是第一个端到端样本，三条 SQL 全部 ratio &lt; 1.0，流程可复用到下一个算子。」</p>
+    <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:28px">
+      <span class="pill green">三条 SQL 全部 ratio &lt; 1.0</span>
+      <span class="pill green">E2E 三条 SQL 全部通过</span>
+      <span class="pill green">综合 ratio 0.963</span>
+      <span class="pill purple">A–I 共 9 轮自主迭代</span>
+    </div>
+    <div class="sep"></div>
+    <p style="font-size:13px;color:var(--text-muted);margin-top:16px">下一步：接入第二个算子验证 Skill 复用性；expression-development 子流程补齐；case-study 机制持续沉淀</p>
+  </div>
+</div>
+
+</div><!-- /deck -->
+
+<!-- NAV -->
+<div class="nav">
+  <button id="prev" onclick="go(-1)" disabled>‹</button>
+  <div class="dots" id="dots"></div>
+  <span class="counter" id="counter">1 / 11</span>
+  <button id="next" onclick="go(1)">›</button>
+</div>
+<div class="kbd-hint">← → 空格翻页 · Esc 关闭详情</div>
+
+<script>
+// ── SLIDE NAV ──
+const slides = document.querySelectorAll('.slide');
+const dotsEl = document.getElementById('dots');
+const counter = document.getElementById('counter');
+const prevBtn = document.getElementById('prev');
+const nextBtn = document.getElementById('next');
+let cur = 0;
+
+slides.forEach((_, i) => {
+  const d = document.createElement('div');
+  d.className = 'dot' + (i===0?' active':'');
+  d.onclick = () => goTo(i);
+  dotsEl.appendChild(d);
+});
+
+function goTo(n) {
+  slides[cur].classList.remove('active');
+  dotsEl.children[cur].classList.remove('active');
+  cur = Math.max(0, Math.min(n, slides.length-1));
+  slides[cur].classList.add('active');
+  dotsEl.children[cur].classList.add('active');
+  counter.textContent = `${cur+1} / ${slides.length}`;
+  prevBtn.disabled = cur===0;
+  nextBtn.disabled = cur===slides.length-1;
+}
+function go(d) { goTo(cur+d); }
+
+document.addEventListener('keydown', e => {
+  if (detailOpen) { if(e.key==='Escape') closeDetail(); return; }
+  if(e.key==='ArrowRight'||e.key===' ') { e.preventDefault(); go(1); }
+  if(e.key==='ArrowLeft') { e.preventDefault(); go(-1); }
+});
+
+// ── DETAIL PANEL ──
+let detailOpen = false;
+const overlay = document.getElementById('detailOverlay');
+const backdrop = document.getElementById('detailBackdrop');
+
+document.getElementById('detailBackdrop').addEventListener('click', closeDetail);
+
+function openDetail(key) {
+  const data = DETAILS[key];
+  if (!data) return;
+  document.getElementById('detailTitle').textContent = data.title;
+  document.getElementById('detailSub').textContent = data.sub || '';
+  document.getElementById('detailBody').innerHTML = data.body;
+  overlay.classList.add('open');
+  detailOpen = true;
+}
+function closeDetail() {
+  overlay.classList.remove('open');
+  detailOpen = false;
+}
+
+// ── DETAIL CONTENT DATABASE ──
+const DETAILS = {
+
+  // ── MCP 工具 ──
+  mcp: {
+    title: 'spark-remote-test MCP 工具',
+    sub: '通过 SSH 将远端 YARN 集群的完整 CI 能力暴露给 Agent',
+    body: `
+    <div class="d-section">
+      <div class="d-title">工具列表与能力</div>
+      <div class="d-row">
+        <div class="d-num">1</div>
+        <div class="d-content">
+          <div class="d-name"><code>compile_omni</code></div>
+          <div class="d-desc">触发远端 OmniOperator 编译（含 UT）。接受 git 仓库 URL + 分支名作为参数，通过 SSH 执行 compile_omni.sh，阻塞等待结果。</div>
+          <div class="d-code">compile_omni(repo_url="...", branch="feature/sortagg")</div>
+        </div>
+      </div>
+      <div class="d-row">
+        <div class="d-num">2</div>
+        <div class="d-content">
+          <div class="d-name"><code>compile_gluten</code></div>
+          <div class="d-desc">触发 Gluten + OmniOperator 联合编译。需传入 Omni + Gluten 各一组 URL/分支（共 4 个参数）。</div>
+        </div>
+      </div>
+      <div class="d-row">
+        <div class="d-num">3</div>
+        <div class="d-content">
+          <div class="d-name"><code>run_e2e_sql</code></div>
+          <div class="d-desc">将 SQL 语句传给远端 run_e2e_sql.sh，以 Omni/Gluten 引擎执行，返回：</div>
+          <div class="d-code">→ App ID
+→ 查询结果（行数 / 聚合值）
+→ Omni 算子下推情况（命中的 Transformer 列表）
+→ Fallback 告警摘要（fallback_warnings）</div>
+        </div>
+      </div>
+      <div class="d-row">
+        <div class="d-num">4</div>
+        <div class="d-content">
+          <div class="d-name"><code>run_spark_test_operator</code> / <code>run_spark_test_all</code></div>
+          <div class="d-desc">性能测试工具。前者启用 Gluten/Omni，后者为纯原生 Spark。SQL 文件中重复 SELECT 获得冷+热跑时间。返回 QUERY TIME（每条 SELECT 各一个时间值）。</div>
+          <div class="d-trap">⚠ 不存在"内置 2 次"机制 — 要获得 cold+hot 必须在 SQL 文件中将同一条 SELECT 写两遍</div>
+        </div>
+      </div>
+      <div class="d-row">
+        <div class="d-num">5</div>
+        <div class="d-content">
+          <div class="d-name"><code>fetch_spark_flame_graphs</code></div>
+          <div class="d-desc">通过 SFTP 将远端 /tmp/tmp1 下的 async-profiler HTML 火焰图拉取到本机 spark_remote_mcp/flame_exports/ 下，返回 file:// 路径。</div>
+          <div class="d-code">fetch_spark_flame_graphs(session_folder_name="omni_before")</div>
+        </div>
+      </div>
+    </div>
+    <div class="d-section">
+      <div class="d-title">辅助脚本（本地 Playwright）</div>
+      <div class="d-row">
+        <div class="d-num">A</div>
+        <div class="d-content">
+          <div class="d-name"><code>scrape_spark_execution.py</code></div>
+          <div class="d-desc">抓取 Spark History Server 执行计划页面，输出：执行计划 PNG 截图、算子列表 JSON、原始 HTML。用于确认算子命中 + 定位最慢 Stage。</div>
+        </div>
+      </div>
+      <div class="d-row">
+        <div class="d-num">B</div>
+        <div class="d-content">
+          <div class="d-name"><code>scrape_stage_details.py</code></div>
+          <div class="d-desc">抓取 Stage 详情页（自动展开隐藏指标），输出 Duration/GC/Shuffle 分布，用于识别 Task 长尾与 IO 瓶颈。</div>
+        </div>
+      </div>
+    </div>`
+  },
+
+  // ── operator-development Skill ──
+  'skill-op': {
+    title: 'operator-development Skill',
+    sub: '6 步强制工作流 + 卡点约束，防止 Agent 跳步',
+    body: `
+    <div class="d-section">
+      <div class="d-title">触发条件</div>
+      <div class="d-desc" style="font-size:12px;line-height:1.7;color:var(--text-muted)">
+        用户要新增/补齐某 Spark 算子在 Omni 路径上的支持，或提到：算子下推、回退、<code>support*Exec</code>、<code>gen*ExecTransformer</code>、<code>SubstraitToOmniPlan</code>、算子 UT、类型覆盖等。
+      </div>
+    </div>
+    <div class="d-section">
+      <div class="d-title">核心卡点：步骤 2→3 之间</div>
+      <div class="d-check"><span class="ck">🔒</span><p><strong style="color:var(--accent3)">强制</strong>：在创建或修改任何实现代码之前，必须在磁盘上落盘以下两个文件：</p></div>
+      <div class="d-code">deliverables/&lt;算子标识&gt;/context_&lt;算子标识&gt;.md
+deliverables/&lt;算子标识&gt;/self_validation_&lt;算子标识&gt;.md</div>
+      <div class="d-check"><span class="ck warn">⚠</span><p>Agent 步骤 3 开始前须口头确认：上述两个路径在磁盘上已存在且非空模板；否则 <strong>禁止</strong> 进入实现阶段。</p></div>
+    </div>
+    <div class="d-section">
+      <div class="d-title">执行原则</div>
+      <div class="d-check"><span class="ck">✓</span><p>顺序：先步骤 0–2（含卡点文档）→ 再步骤 3；不得以「改动很小」跳过文档</p></div>
+      <div class="d-check"><span class="ck">✓</span><p>实现前先 grep/读代码确认是否已有可复用路径</p></div>
+      <div class="d-check"><span class="ck">✓</span><p>声称「文件已存在/类已实现」前，必须在磁盘上验证 .h/.cpp 与类定义</p></div>
+      <div class="d-check"><span class="ck">✓</span><p>使用 spark-remote-test MCP 工具进行全量编译，不使用本地脚本替代</p></div>
+      <div class="d-check"><span class="ck">✓</span><p>UT：对齐 Velox 同算子测试维度（基础/空/NULL/类型/异常），不擅自缩水</p></div>
+    </div>`
+  },
+
+  // ── performance Skill ──
+  'skill-perf': {
+    title: 'omni-performance-improvement Skill',
+    sub: '4 阶段性能 Playbook，硬性规则驱动，证据先于改动',
+    body: `
+    <div class="d-section">
+      <div class="d-title">Hard Rules（不可违反）</div>
+      <div class="d-check"><span class="ck warn">⚠</span><p>首先确保代码正确性：运行性能测试之前确认 UT 与 E2E 无回退问题</p></div>
+      <div class="d-check"><span class="ck warn">⚠</span><p>必须三方对比：<code>Native</code> / <code>Omni-Before</code> / <code>Omni-After</code></p></div>
+      <div class="d-check"><span class="ck warn">⚠</span><p>必须同条件测试：同数据、同资源、同参数</p></div>
+      <div class="d-check"><span class="ck warn">⚠</span><p><strong>没有画像不允许直接改实现</strong></p></div>
+      <div class="d-check"><span class="ck warn">⚠</span><p>必须输出可回退结论：收益、边界、风险、回退条件</p></div>
+      <div class="d-check"><span class="ck warn">⚠</span><p>每一步优化必须单独记录阶段性测量结果，禁止只写最终 ratio</p></div>
+      <div class="d-check"><span class="ck warn">⚠</span><p>有效优化（ratio 降幅 &gt;5%）必须沉淀到 references/06-case-studies.md</p></div>
+      <div class="d-check"><span class="ck warn">⚠</span><p>性能测试 SQL 必须使用 TPC-DS 标准数据集中的表，禁用小测试表（行数 &lt;百万）</p></div>
+    </div>
+    <div class="d-section">
+      <div class="d-title">latency_ratio 精确计算公式</div>
+      <div class="d-formula">单次测量值 = (冷跑耗时 + 热跑耗时) / 2
+
+Native_avg  = mean( (N_cold1+N_hot1)/2, ... , (N_cold5+N_hot5)/2 )
+Omni_avg    = mean( (O_cold1+O_hot1)/2, ... , (O_cold5+O_hot5)/2 )
+latency_ratio = Omni_avg / Native_avg</div>
+      <div class="d-trap">⚠ 禁止仅用热跑单值计算 ratio（OS page cache 效果会掩盖冷启动开销）</div>
+    </div>`
+  },
+
+  // ── STEP 0-1 ──
+  step01: {
+    title: 'STEP 0–1 · 现状分析 + 三件套验证',
+    sub: '在任何实现之前，先确认算子在当前基础分支的真实状态',
+    body: `
+    <div class="d-section">
+      <div class="d-title">Step 0 · 建立架构上下文</div>
+      <div class="d-desc" style="font-size:12px;line-height:1.7;color:var(--text-muted)">阅读 references/0_architecture.md，了解 Velox / Gluten / OmniOperator 分工与数据流，建立执行链路心智模型。</div>
+    </div>
+    <div class="d-section">
+      <div class="d-title">Step 1 · 已实现三件套验证（结论为"已实现"时强制）</div>
+      <div class="d-desc" style="font-size:12px;color:var(--text-muted);margin-bottom:10px">得出"该算子代码已存在，无需开发"结论之前，必须在 <strong style="color:var(--accent)">2026_330_poc 基础分支</strong>上逐项核实：</div>
+      <div class="d-row">
+        <div class="d-num">1</div>
+        <div class="d-content">
+          <div class="d-name"><code>support&lt;Op&gt;Exec()</code> 显式重写为 <code>true</code></div>
+          <div class="d-desc">grep <code>supportXxxExec</code> in backends-omni/</div>
+          <div class="d-trap">⚠ 基类默认返回 false，未重写 = 始终回退，即使有实现代码也不会被调用</div>
+        </div>
+      </div>
+      <div class="d-row">
+        <div class="d-num">2</div>
+        <div class="d-content">
+          <div class="d-name"><code>gen&lt;Op&gt;ExecTransformer()</code> 返回非 null 实例</div>
+          <div class="d-desc">grep <code>genXxxExecTransformer</code> in OmniSparkPlanExecApi.scala</div>
+          <div class="d-trap">⚠ 返回 null = 无法构建执行计划，物理计划中不会出现 Transformer 节点</div>
+        </div>
+      </div>
+      <div class="d-row">
+        <div class="d-num">3</div>
+        <div class="d-content">
+          <div class="d-name">相关 Config 默认值为 enabled 且无 .internal() 阻止</div>
+          <div class="d-desc">grep Config key in GlutenConfig.scala</div>
+          <div class="d-trap">⚠ .internal() + false 默认值 = 运行时 SET 无效，永远不会启用</div>
+        </div>
+      </div>
+      <div class="d-row">
+        <div class="d-num">4</div>
+        <div class="d-content">
+          <div class="d-name">E2E 执行计划中出现 <code>XxxExecTransformer</code> 节点名</div>
+          <div class="d-desc">run_e2e_sql + scrape_spark_execution.py，SQL 必须用能触发目标物理节点的 Spark 语法</div>
+          <div class="d-trap">⚠ 用语义等效但物理路径不同的 SQL 会误判（如 WHERE rand()&lt;x 代替 TABLESAMPLE）</div>
+        </div>
+      </div>
+      <div class="d-check" style="margin-top:10px"><span class="ck warn">⚠</span><p><strong>任一项不满足 → 结论改为"未完整实现，需修复/开发"，进入步骤 3。</strong></p></div>
+    </div>`
+  },
+
+  // ── STEP 2 ──
+  step2: {
+    title: 'STEP 2 · 文档卡点（强制）',
+    sub: '在创建或修改任何实现代码之前必须完成，否则禁止进入步骤 3',
+    body: `
+    <div class="d-section">
+      <div class="d-title">必须落盘的四项材料</div>
+      <div class="d-row">
+        <div class="d-num">1</div>
+        <div class="d-content">
+          <div class="d-name">context_&lt;算子标识&gt;.md</div>
+          <div class="d-desc">来源：复制 templates/context_xxop_template.md<br>必填：gap 分析、设计方案、影响面评估</div>
+          <div class="d-code">路径：&lt;项目根目录&gt;/deliverables/&lt;算子标识&gt;/context_&lt;算子标识&gt;.md</div>
+        </div>
+      </div>
+      <div class="d-row">
+        <div class="d-num">2</div>
+        <div class="d-content">
+          <div class="d-name">self_validation_&lt;算子标识&gt;.md</div>
+          <div class="d-desc">来源：复制 templates/self_validation_xxop_report.md<br>定位为测试设计文档，必填：验证用 SQL、预期结果、执行计划检查点</div>
+          <div class="d-code">路径：&lt;项目根目录&gt;/deliverables/&lt;算子标识&gt;/self_validation_&lt;算子标识&gt;.md</div>
+        </div>
+      </div>
+      <div class="d-row">
+        <div class="d-num">3</div>
+        <div class="d-content">
+          <div class="d-name">test_design_&lt;算子标识&gt;.md（如项目单独维护）</div>
+          <div class="d-desc">补充测试矩阵、卡点项、E2E 与性能口径，不单独维护时需在 <code>self_validation</code> 中完整覆盖这些内容</div>
+          <div class="d-code">路径：&lt;项目根目录&gt;/deliverables/&lt;算子标识&gt;/test_design_&lt;算子标识&gt;.md</div>
+        </div>
+      </div>
+      <div class="d-row">
+        <div class="d-num">4</div>
+        <div class="d-content">
+          <div class="d-name">部分 UT 用例草案</div>
+          <div class="d-desc">至少先列出基础路径、空输入、NULL、边界类型、异常路径中的部分 UT，用来约束实现范围，避免“代码先写、UT 后补”</div>
+          <div class="d-code">形式：可单独成文档，也可写入 context / self_validation 的 UT 设计章节</div>
+        </div>
+      </div>
+    </div>
+    <div class="d-section">
+      <div class="d-title">Agent 步骤 3 开始前自检</div>
+      <div class="d-check"><span class="ck">✓</span><p>context 与 self_validation 已在磁盘上存在</p></div>
+      <div class="d-check"><span class="ck">✓</span><p>测试设计文档已存在，或 self_validation 已承担完整测试设计职责</p></div>
+      <div class="d-check"><span class="ck">✓</span><p>至少已有一部分 UT 用例草案，不允许 0 用例进入实现阶段</p></div>
+      <div class="d-check"><span class="ck">✓</span><p>文件内容非空模板（「任务 / 验证 / UT 设计」部分已填写）</p></div>
+      <div class="d-check"><span class="ck warn">⚠</span><p>任一不满足 → <strong>禁止</strong> 进入实现阶段，无例外</p></div>
+    </div>
+    <div class="d-section">
+      <div class="d-title">设计哲学</div>
+      <div class="d-desc" style="font-size:12px;line-height:1.7;color:var(--text-muted)">文档落盘不是为了记录，而是为了强迫 Agent 在写代码之前先想清楚 gap 是什么、方案是什么、测试如何验证、UT 至少覆盖哪一部分。这个“摩擦成本”是防止 Agent 跳步的核心机制。</div>
+    </div>`
+  },
+
+  // ── STEP 3 ──
+  step3: {
+    title: 'STEP 3 · 分层实现',
+    sub: 'Gluten Scala → Substrait C++ → OmniOperator C++，严格分层，不可跳过',
+    body: `
+    <div class="d-section">
+      <div class="d-title">层 1 · Gluten Scala（算子开关与转换器）</div>
+      <div class="d-check"><span class="ck">✓</span><p>在 OmniBackend.scala 中重写 <code>support&lt;Op&gt;Exec() = true</code></p></div>
+      <div class="d-check"><span class="ck">✓</span><p>在 OmniSparkPlanExecApi.scala 中实现 <code>gen&lt;Op&gt;ExecTransformer()</code> 返回非 null Transformer</p></div>
+      <div class="d-check"><span class="ck">✓</span><p>实现 XxxExecTransformer 类，覆盖 doValidate() / doTransform() / genRowToColumnarExec()</p></div>
+    </div>
+    <div class="d-section">
+      <div class="d-title">层 2 · Substrait C++（校验与协议转换）</div>
+      <div class="d-check"><span class="ck">✓</span><p>在 SubstraitValidator 中添加 validate&lt;Op&gt;Relation() 方法</p></div>
+      <div class="d-check"><span class="ck">✓</span><p>在 SubstraitToOmniPlan 中添加 convert&lt;Op&gt;Relation() 方法，生成 OmniPlanNode</p></div>
+      <div class="d-check"><span class="ck">✓</span><p>注册 Substrait 关系类型与 Omni 节点的映射关系</p></div>
+    </div>
+    <div class="d-section">
+      <div class="d-title">层 3 · OmniOperator C++（执行引擎）</div>
+      <div class="d-check"><span class="ck">✓</span><p><strong>PlanNode</strong>：定义算子的逻辑属性（输入/输出类型、配置参数）</p></div>
+      <div class="d-check"><span class="ck">✓</span><p><strong>OperatorFactory</strong>：根据 PlanNode 创建 Operator 实例，绑定资源</p></div>
+      <div class="d-check"><span class="ck">✓</span><p><strong>Operator</strong>：实现 AddInput() / GetOutput() / Close() 核心接口</p></div>
+      <div class="d-check"><span class="ck">✓</span><p>UT 覆盖：基础/空输入/NULL/多类型/边界/异常，对齐 Velox 同算子测试维度</p></div>
+    </div>`
+  },
+
+  // ── STEP 4 ──
+  step4: {
+    title: 'STEP 4 · 编译 + 验证',
+    sub: '任一步骤失败则回到步骤 3，不可跳过',
+    body: `
+    <div class="d-section">
+      <div class="d-title">验证流程（严格顺序）</div>
+      <div class="d-row">
+        <div class="d-num">1</div>
+        <div class="d-content">
+          <div class="d-name"><code>compile_omni</code>（含 UT）</div>
+          <div class="d-desc">触发远端 OmniOperator 编译，含全量 GTest。<strong style="color:var(--accent2)">UT 必须全部通过</strong>，有失败则禁止继续。</div>
+        </div>
+      </div>
+      <div class="d-row">
+        <div class="d-num">2</div>
+        <div class="d-content">
+          <div class="d-name"><code>compile_gluten</code></div>
+          <div class="d-desc">Gluten + OmniOperator 联合编译，确认 Scala 侧与 C++ 侧联调通过。</div>
+        </div>
+      </div>
+      <div class="d-row">
+        <div class="d-num">3</div>
+        <div class="d-content">
+          <div class="d-name"><code>run_e2e_sql</code></div>
+          <div class="d-desc">SQL 必须使用能在物理计划中产生目标算子节点的 Spark 语法。检查：<br>✅ 执行计划中出现 XxxExecTransformer 节点名<br>✅ fallback_warnings 为空（0 条）</div>
+          <div class="d-trap">⚠ E2E SQL 不可复用为性能测试 SQL，二者职责不同</div>
+        </div>
+      </div>
+      <div class="d-row">
+        <div class="d-num">4</div>
+        <div class="d-content">
+          <div class="d-name"><code>scrape_spark_execution.py</code></div>
+          <div class="d-desc">抓取执行计划截图存档，作为"算子已正确下推"的永久证据。输出 PNG + JSON + HTML 三份文件。</div>
+        </div>
+      </div>
+    </div>
+    <div class="d-section">
+      <div class="d-title">代码推送时机（步骤 3.5）</div>
+      <div class="d-desc" style="font-size:12px;line-height:1.7;color:var(--text-muted)">实现完成后、验证开始前：git checkout -b feature/&lt;算子名&gt; → commit → push 到 peacha2025 fork，编译时使用 fork URL + 功能分支。</div>
+    </div>`
+  },
+
+  // ── STEP 5 ──
+  step5: {
+    title: 'STEP 5 · 性能优化',
+    sub: '功能已正确后执行，加载 omni-performance-improvement Skill',
+    body: `
+    <div class="d-section">
+      <div class="d-title">SQL 设计 4 步流程</div>
+      <div class="d-row"><div class="d-num">1</div><div class="d-content"><div class="d-name">根据算子语义写候选 SQL</div><div class="d-desc">使用 TPC-DS 大表（store_sales 2.87 亿行），确保查询时间 &gt;5s</div></div></div>
+      <div class="d-row"><div class="d-num">2</div><div class="d-content"><div class="d-name">run_e2e_sql 验证算子命中</div><div class="d-desc">确认 Transformer 出现在下推列表中，Fallback=0，QUERY TIME 有值</div></div></div>
+      <div class="d-row"><div class="d-num">3</div><div class="d-content"><div class="d-name">调整执行时间到合理范围</div><div class="d-desc">目标：5s ～ 60s。过短则加大数据量，过长则缩小</div></div></div>
+      <div class="d-row"><div class="d-num">4</div><div class="d-content"><div class="d-name">固定 SQL，进入正式三方测试</div><div class="d-desc">Native / Omni-Before / Omni-After 三轮使用完全相同的 SQL</div></div></div>
+    </div>
+    <div class="d-section">
+      <div class="d-title">性能目标</div>
+      <div class="d-formula">latency_ratio = Omni_avg / Native_avg
+
+目标：ratio &lt; 1.0（有提升即通过）
+ratio &gt; 1.0 → 分析根因（实现问题 or 测试 SQL 不适合）</div>
+    </div>
+    <div class="d-section">
+      <div class="d-title">不适合 SortAgg 的 SQL 示例（教训）</div>
+      <div class="d-desc" style="font-size:12px;color:var(--text-muted)">q3 场景（ss_hdemo_sk 高基数）引入了 MakeDecimal 表达式，导致 vector path 缺失，ratio 初始达 1.085。需先修复功能再测性能。</div>
+    </div>`
+  },
+
+  // ── STEP 6 ──
+  step6: {
+    title: 'STEP 6 · 交付归档',
+    sub: '在 deliverables/<算子标识>/ 下完整归档所有产物',
+    body: `
+    <div class="d-section">
+      <div class="d-title">目录结构规范</div>
+      <div class="d-code">deliverables/&lt;op&gt;/
+  context_&lt;op&gt;.md            # 算子背景文档
+  self_validation_&lt;op&gt;.md    # 正确性验证文档
+  perf_report_&lt;op&gt;.md        # 性能测试报告（唯一，覆盖更新）
+  modification_trace_&lt;op&gt;.md # 修改追踪记录
+  delivery_summary_&lt;op&gt;.md   # 交付总结
+  artifacts/
+    compile/                   # 最新编译日志
+    e2e/                       # 最新 E2E 日志
+    perf/
+      baseline_YYYYMMDD/
+        raw_output/            # ★ 每次工具调用的完整 stdout
+          native_run1.txt
+          omni_run1.txt
+        flamegraph/            # 火焰图（before/after）
+        execution_plan/        # 执行计划截图
+    _archive/                  # 过期文件（不删除）</div>
+    </div>
+    <div class="d-section">
+      <div class="d-title">报告唯一性原则</div>
+      <div class="d-check"><span class="ck">✓</span><p>perf_report_&lt;op&gt;.md 只保留一份，每次重测后原地更新</p></div>
+      <div class="d-check"><span class="ck">✓</span><p>旧文件移动到 _archive/，不得原地保留（防新旧混淆）</p></div>
+      <div class="d-check"><span class="ck warn">⚠</span><p>cold 数据一旦遗漏则永久丢失，每次工具调用后立即保存完整输出</p></div>
+    </div>`
+  },
+
+  // ── PHASE 1 ──
+  phase1: {
+    title: 'Phase 1 · Baseline',
+    sub: '建立可重复的性能基线，确定优化目标',
+    body: `
+    <div class="d-section">
+      <div class="d-title">SQL 设计 4 步（Claude 自主完成）</div>
+      <div class="d-row"><div class="d-num">1</div><div class="d-content"><div class="d-name">根据算子语义写候选 SQL</div><div class="d-desc">数据库固定为 tpcds_bin_partitioned_decimal_orc_100，优先用 store_sales（约 2.87 亿行）</div></div></div>
+      <div class="d-row"><div class="d-num">2</div><div class="d-content"><div class="d-name">run_e2e_sql 验证算子命中（不计入性能数据）</div><div class="d-desc">✅ Transformer 出现在下推列表 ✅ Fallback=0 ✅ QUERY TIME 有值</div></div></div>
+      <div class="d-row"><div class="d-num">3</div><div class="d-content"><div class="d-name">调整执行时间到 5s～60s 范围</div><div class="d-desc">过短则加大数据量，过长则增加过滤条件</div></div></div>
+      <div class="d-row"><div class="d-num">4</div><div class="d-content"><div class="d-name">固定 SQL，所有三轮使用完全相同的 SQL</div></div></div>
+    </div>
+    <div class="d-section">
+      <div class="d-title">测量方法</div>
+      <div class="d-desc" style="font-size:12px;color:var(--text-muted);margin-bottom:8px">每次性能验证按 5 轮执行；每轮先冷跑 1 次，再连续热跑 4 次；Native 和 Omni 分别独立完成 5 轮：</div>
+      <div class="d-formula">Native_avg = mean( (N_cold1+N_hot1)/2, ... , (N_cold5+N_hot5)/2 )
+Omni_avg   = mean( (O_cold1+O_hot1)/2, ... , (O_cold5+O_hot5)/2 )
+ratio = Omni_avg / Native_avg</div>
+      <div class="d-trap">⚠ 每次工具调用后立即将完整输出保存到 raw_output/，cold 数据一旦遗漏永久丢失</div>
+    </div>
+    <div class="d-section">
+      <div class="d-title">常见 QUERY TIME 为空的排查路径</div>
+      <div class="d-check"><span class="ck warn">①</span><p>SQL 中的表在当前数据库上下文是否存在（自建小表在 tpcds_bin_ 库中不存在）</p></div>
+      <div class="d-check"><span class="ck warn">②</span><p>SQL 中是否有表达式触发 Gluten native validation 失败（如 col % N、CAST 等）</p></div>
+      <div class="d-check"><span class="ck warn">③</span><p>查询是否静默失败（无报错但也无输出）</p></div>
+    </div>`
+  },
+
+  // ── PHASE 2 ──
+  phase2: {
+    title: 'Phase 2 · Profiling',
+    sub: '采集足够证据，可复现热点，可关联到具体算子或 Stage',
+    body: `
+    <div class="d-section">
+      <div class="d-title">2-A 火焰图采集</div>
+      <div class="d-row"><div class="d-num">1</div><div class="d-content"><div class="d-name">跑 Omni 性能测试</div><div class="d-code">run_spark_test_operator(query_sql=&lt;目标SQL&gt;)</div><div class="d-desc">SQL 执行时间须 &gt;5s；async-profiler 在 5s 时写出 /tmp/tmp1/q1.sql.html</div></div></div>
+      <div class="d-row"><div class="d-num">2</div><div class="d-content"><div class="d-name">抓取 Omni 火焰图</div><div class="d-code">fetch_spark_flame_graphs(session_folder_name="omni_before")</div><div class="d-desc">下载到 spark_remote_mcp/flame_exports/omni_before/q1.sql.html，并复制到 deliverables 归档</div></div></div>
+      <div class="d-row"><div class="d-num">3</div><div class="d-content"><div class="d-name">跑 Native 基线并抓取火焰图</div><div class="d-code">run_spark_test_all(query_sql=&lt;同一SQL&gt;)
+fetch_spark_flame_graphs(session_folder_name="native_before")</div></div></div>
+    </div>
+    <div class="d-section">
+      <div class="d-title">2-B 执行计划抓取</div>
+      <div class="d-desc" style="font-size:12px;color:var(--text-muted);margin-bottom:6px"><code>scrape_spark_execution.py -e &lt;app_id&gt; -q &lt;query_id&gt;</code></div>
+      <div class="d-desc" style="font-size:12px;color:var(--text-muted)">输出：执行计划 PNG + 算子列表 JSON + 原始 HTML<br>用于定位最慢算子 Stage（WholeStageCodegenTransformer 的 total_duration_ms）</div>
+    </div>
+    <div class="d-section">
+      <div class="d-title">2-C Stage 级别指标</div>
+      <div class="d-desc" style="font-size:12px;color:var(--text-muted);margin-bottom:6px"><code>scrape_stage_details.py -e &lt;app_id&gt; -s &lt;stage_id&gt;</code></div>
+      <div class="d-desc" style="font-size:12px;color:var(--text-muted)">自动展开所有隐藏指标，输出 Duration / GC / Shuffle 分布<br>识别 Task 长尾（max &gt;&gt; median = 存在倾斜）</div>
+    </div>
+    <div class="d-section">
+      <div class="d-title">输出要求（Exit Criteria）</div>
+      <div class="d-check"><span class="ck">✓</span><p>TOP5 热点函数（来自火焰图）</p></div>
+      <div class="d-check"><span class="ck">✓</span><p>瓶颈 Stage 的 Duration/GC/Shuffle 摘要</p></div>
+      <div class="d-check"><span class="ck">✓</span><p>可复现热点，可关联到具体算子或 Stage</p></div>
+    </div>`
+  },
+
+  // ── PHASE 3 ──
+  phase3: {
+    title: 'Phase 3 · Diagnose',
+    sub: '按信号先定性，再去参考文档定量确认，给出主瓶颈 + 次瓶颈',
+    body: `
+    <div class="d-section">
+      <div class="d-title">瓶颈信号判定表</div>
+      <table class="d-table">
+        <thead><tr><th>Signal</th><th>类型</th><th>优化方向</th></tr></thead>
+        <tbody>
+          <tr><td>纯计算热点 &gt;50%</td><td><span class="d-badge orange">计算效率</span></td><td>SIMD、算法降阶、循环优化</td></tr>
+          <tr><td>GC 高 / 分配热点多</td><td><span class="d-badge purple">内存压力</span></td><td>预分配、对象复用、紧凑布局、零拷贝</td></tr>
+          <tr><td>null 判断密集 且 null &gt;20%</td><td><span class="d-badge blue">null 低效</span></td><td>null bitmap 提前过滤</td></tr>
+          <tr><td>字典率 &lt;5% 且频繁 decode</td><td><span class="d-badge blue">字典浪费</span></td><td>延迟解码、字典域直接计算</td></tr>
+          <tr><td>Task 长尾显著（max&gt;&gt;median）</td><td><span class="d-badge orange">倾斜</span></td><td>分区策略修正、两阶段聚合</td></tr>
+          <tr><td>futex/锁等待显著</td><td><span class="d-badge orange">锁竞争</span></td><td>无锁数据结构、减少共享状态</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="d-section">
+      <div class="d-title">Exit Criteria</div>
+      <div class="d-check"><span class="ck">✓</span><p>给出 1 个主瓶颈 + 最多 1 个次瓶颈</p></div>
+      <div class="d-check"><span class="ck">✓</span><p>每个结论有证据（火焰图截图 or Stage 指标数值）</p></div>
+      <div class="d-check"><span class="ck warn">⚠</span><p>没有证据的结论不允许进入 Phase 4 的优化环节</p></div>
+    </div>
+    <div class="d-section">
+      <div class="d-title">SortAgg 实际案例</div>
+      <div class="d-desc" style="font-size:12px;color:var(--text-muted)">火焰图显示 GetOutput 调用次数极高（约 1000 次），占用大量 JNI overhead → 主瓶颈为"输出粒度过细"→ Opt3 批量输出合并（4096行/batch）→ q1 最终 5 次平均 ratio 收敛到 0.993</div>
+    </div>`
+  },
+
+  // ── PHASE 4 ──
+  phase4: {
+    title: 'Phase 4 · Optimize + Validate',
+    sub: '实现 → 正确性验证（强制）→ 性能测量 → 输出结论',
+    body: `
+    <div class="d-section">
+      <div class="d-title">5 步流程（严格顺序）</div>
+      <div class="d-row"><div class="d-num">1</div><div class="d-content"><div class="d-name">仅实现"主瓶颈对应方案"</div><div class="d-desc">避免一次混入多类改动（便于归因和回滚）</div></div></div>
+      <div class="d-row"><div class="d-num">2</div><div class="d-content"><div class="d-name">补充单测与边界用例</div><div class="d-desc">新增的优化路径必须有对应 UT 覆盖</div></div></div>
+      <div class="d-row">
+        <div class="d-num" style="background:rgba(63,185,80,.2);border-color:var(--accent2);color:var(--accent2)">3</div>
+        <div class="d-content">
+          <div class="d-name" style="color:var(--accent2)">✅ 优化后正确性验证（强制，性能测量前必须通过）</div>
+          <div class="d-check" style="margin-top:6px"><span class="ck">✓</span><p>compile_omni（含 UT）：编译通过，UT 全部通过，无新增失败用例</p></div>
+          <div class="d-check"><span class="ck">✓</span><p>run_e2e_sql：目标算子仍命中（XxxExecTransformer 出现在执行计划中）</p></div>
+          <div class="d-check"><span class="ck">✓</span><p>Fallback 告警仍为 0</p></div>
+          <div class="d-check"><span class="ck">✓</span><p>查询结果与优化前一致（对比行数 / 关键聚合值）</p></div>
+          <div class="d-trap">⚠ 以上任一项失败 → 禁止进入性能测量，回到步骤 1 修复</div>
+        </div>
+      </div>
+      <div class="d-row"><div class="d-num">4</div><div class="d-content"><div class="d-name">三方 A/B 验证：Native / Omni-Before / Omni-After</div><div class="d-desc">同 SQL、同条件、各跑 5 次，每次含 1 冷 + 4 热，按统一公式计算 ratio</div></div></div>
+      <div class="d-row"><div class="d-num">5</div><div class="d-content"><div class="d-name">输出收益与边界</div><div class="d-desc">Gain / Boundary / Risk / Rollback 四项必须明确</div></div></div>
+    </div>
+    <div class="d-section">
+      <div class="d-title">有效优化的沉淀要求</div>
+      <div class="d-desc" style="font-size:12px;color:var(--text-muted)">任何导致 ratio 有可量化降幅（&gt;5%）的改动，必须在 references/06-case-studies.md 中补充一条案例，格式：现象→证据→改动→效果→可复用检查项。</div>
+    </div>`
+  },
+
+  // ── TIMELINE A ──
+  tlA: {
+    title: '轮次 A · SortAgg 内存释放与生命周期修复',
+    sub: '问题：collect_set 等 state-owning 聚合函数下内存持续累积',
+    body: `
+    <div class="d-section">
+      <div class="d-title">根本问题</div>
+      <div class="d-desc" style="font-size:12px;color:var(--text-muted);line-height:1.7">SortAgg 在 collect_set / collect_list 等 state-owning 聚合场景下，状态释放不完整。随着 Task 执行，聚合状态不断累积但从不释放，触发 MEM_CAP_EXCEEDED，导致 OOM 或执行失败。</div>
+    </div>
+    <div class="d-section">
+      <div class="d-title">修复内容</div>
+      <div class="d-check"><span class="ck">✓</span><p>新增 <code>DestroyAggStates()</code>：在 operator 析构时销毁所有聚合状态对象</p></div>
+      <div class="d-check"><span class="ck">✓</span><p>新增 <code>ResetAggStates()</code>：在处理新 Group 前重置累积状态</p></div>
+      <div class="d-check"><span class="ck">✓</span><p>添加 <code>aggStatesInitialized_</code> 标志位，防止重复初始化</p></div>
+      <div class="d-check"><span class="ck">✓</span><p><code>Close()</code> 与 <code>GetOutput()</code> 收口：确保所有出口路径都触发状态清理</p></div>
+    </div>
+    <div class="d-section">
+      <div class="d-title">意义</div>
+      <div class="d-desc" style="font-size:12px;color:var(--text-muted)">这是 SortAgg 算子所有后续工作的基础——没有正确的内存管理，任何性能优化都是沙上建塔。</div>
+    </div>`
+  },
+
+  // ── TIMELINE B-D ──
+  tlBD: {
+    title: '轮次 B–D · 三轮稳定性修复',
+    sub: 'ArrayType 隔离、collect_set 快路径、执行计划收敛',
+    body: `
+    <div class="d-section">
+      <div class="d-title">B 轮 · 禁止 Omni columnar shuffle 处理 ArrayType</div>
+      <div class="d-desc" style="font-size:12px;color:var(--text-muted);margin-bottom:6px">问题：collect_set 结果包含 ArrayType，Omni columnar shuffle 对该类型支持不完整，报 <code>Unsupported ShuffleType: 11</code></div>
+      <div class="d-code">SET spark.gluten.sql.columnar.shuffle=false;</div>
+      <div class="d-desc" style="font-size:12px;color:var(--text-muted)">在所有性能验证和回归验证中统一使用此配置，避免 ArrayType 在 shuffle 阶段触发不支持路径。</div>
+    </div>
+    <div class="d-section">
+      <div class="d-title">C 轮 · collect_set fast path 优化</div>
+      <div class="d-check"><span class="ck">✓</span><p>无外部 null 且 vector 本身无 null 时走快路径，跳过逐行 null 检查</p></div>
+      <div class="d-check"><span class="ck">✓</span><p>修正 baseRowIndex 与 nullMap 的访问逻辑</p></div>
+      <div class="d-desc" style="font-size:12px;color:var(--text-muted);margin-top:6px">为 q1 / q2 性能提升和 q3 后续优化提供基础。</div>
+    </div>
+    <div class="d-section">
+      <div class="d-title">D 轮 · Sort 规划与执行计划收敛</div>
+      <div class="d-desc" style="font-size:12px;color:var(--text-muted)">问题：SortAgg 需要稳定命中排序输入，若规划阶段被局部 sort 消掉或被错误改写，会影响最终算子命中。<br><br>修复：收敛 SortAgg 前置 sort 的规划与 required ordering，确保 q1 / q2 / q3 对应 SQL 最终都稳定命中 OmniSortAggregateExecTransformer。</div>
+    </div>`
+  },
+
+  // ── TIMELINE E ──
+  tlE: {
+    title: '轮次 E · DECIMAL64 group-by key 支持',
+    sub: 'KeysEqual switch 缺少 OMNI_DECIMAL64 分支，高频类型直接 throw',
+    body: `
+    <div class="d-section">
+      <div class="d-title">问题定位</div>
+      <div class="d-desc" style="font-size:12px;color:var(--text-muted);line-height:1.7">在 delivery_summary 的类型矩阵中，DECIMAL64（即 DECIMAL(precision≤18)）标注为"已知 bug，优先级高"。Spark 中大量 decimal 列使用 DECIMAL64 路径，若该列作为 GROUP BY key，<code>KeysEqual</code> 函数会直接 throw <code>UNSUPPORTED_ERROR</code>。</div>
+    </div>
+    <div class="d-section">
+      <div class="d-title">修复方式</div>
+      <div class="d-desc" style="font-size:12px;color:var(--text-muted);margin-bottom:6px">在 <code>SortAggregationWithExprOperator::KeysEqual</code> 的 switch 语句中添加：</div>
+      <div class="d-code">case OMNI_DECIMAL64:
+    // 与 DECIMAL128 相同的比较逻辑
+    return lhs.decimal64_val == rhs.decimal64_val;</div>
+      <div class="d-desc" style="font-size:12px;color:var(--text-muted);margin-top:6px">修复复杂度低（加一个 switch case），但影响面大（Spark decimal 高频类型）。</div>
+    </div>
+    <div class="d-section">
+      <div class="d-title">验证</div>
+      <div class="d-check"><span class="ck">✓</span><p>相关测试语义从"抛错"调整为"可正常聚合"</p></div>
+      <div class="d-check"><span class="ck">✓</span><p>UT 覆盖 DECIMAL64 group-by key 场景</p></div>
+    </div>`
+  },
+
+  // ── TIMELINE F ──
+  tlF: {
+    title: '轮次 F · collect_set grouped 路径 offset 修复',
+    sub: '关键提交 18800111，修复 grouped UT 回归',
+    body: `
+    <div class="d-section">
+      <div class="d-title">问题 1 · offset 语义错误</div>
+      <div class="d-desc" style="font-size:12px;color:var(--text-muted);line-height:1.7">在 grouped 路径中，<code>Slice(offset, 1)</code> 后仍继续使用原始 <code>rowIndex</code> 作为 <code>baseRowIndex</code>。由于 Slice 后 vector 的 offset 已改变，继续用原始 rowIndex 会导致访问到错误位置的数据，collect_set grouped UT 失败。</div>
+    </div>
+    <div class="d-section">
+      <div class="d-title">问题 2 · CollectMetrics 异常影响任务收尾</div>
+      <div class="d-desc" style="font-size:12px;color:var(--text-muted)">运行期 CollectMetrics 遇到 node id 缺失时会抛异常，导致 Task 在结束阶段报错，即使查询结果本身正确。调整部分监控链路的容错行为，使其降级为 warn 而非 throw。</div>
+    </div>
+    <div class="d-section">
+      <div class="d-title">修复内容</div>
+      <div class="d-check"><span class="ck">✓</span><p>修复 grouped 路径的 offset 语义，Slice 后使用正确的相对 rowIndex</p></div>
+      <div class="d-check"><span class="ck">✓</span><p>修复 NullsHelper 在 grouped 单行切片后的使用方式</p></div>
+      <div class="d-check"><span class="ck">✓</span><p>调整 CollectMetrics 容错：node id 缺失时降级而非 throw</p></div>
+      <div class="d-check"><span class="ck">✓</span><p>grouped UT 恢复通过，Fallback=0 稳定</p></div>
+    </div>`
+  },
+
+  // ── TIMELINE G ──
+  tlG: {
+    title: '轮次 G · MakeDecimal vector path 接通',
+    sub: '自主定位运行时错误，q3 从运行失败恢复为可跑',
+    body: `
+    <div class="d-section">
+      <div class="d-title">错误现象</div>
+      <div class="d-code">Vector function not found for function: MakeDecimal</div>
+      <div class="d-desc" style="font-size:12px;color:var(--text-muted);margin-top:6px">放开 ExprVerifier 后，q3 不再 fallback 到 JVM，而是进入 Omni 执行路径，但 Runtime 侧 MakeDecimal 缺少可用的 vector 执行路径，直接报错。</div>
+    </div>
+    <div class="d-section">
+      <div class="d-title">定位过程</div>
+      <div class="d-check"><span class="ck">✓</span><p>确认 Validator 已经放行（不是 validation 问题）</p></div>
+      <div class="d-check"><span class="ck">✓</span><p>追踪 FuncExpr 初始化逻辑，发现 MakeDecimal 未注册 vector path</p></div>
+      <div class="d-check"><span class="ck">✓</span><p>定位到 expressions.cpp 中的函数注册逻辑</p></div>
+    </div>
+    <div class="d-section">
+      <div class="d-title">修复（commit 0f7e4e6b）</div>
+      <div class="d-desc" style="font-size:12px;color:var(--text-muted)">文件：core/src/expression/expressions.cpp<br>在 FuncExpr 初始化中为 MakeDecimal 接上 CastExpr vector path，使其能走向量化执行路径。</div>
+    </div>
+    <div class="d-section">
+      <div class="d-title">结果</div>
+      <div class="d-check"><span class="ck">✓</span><p>compile_omni 通过</p></div>
+      <div class="d-check"><span class="ck">✓</span><p>q3 从"执行失败"恢复为"可跑两次 SELECT"</p></div>
+      <div class="d-check"><span class="ck warn">→</span><p>此时 ratio = 1.085（功能已通，性能待优化）</p></div>
+    </div>`
+  },
+
+  // ── TIMELINE H-I ──
+  tlHI: {
+    title: '轮次 H–I · MakeDecimal 两轮性能优化',
+    sub: 'q3 ratio: 1.085 → 1.028 → 0.985（纯代码）',
+    body: `
+    <div class="d-section">
+      <div class="d-title">H 轮（commit 3b512c4f）· 快路径</div>
+      <div class="d-desc" style="font-size:12px;color:var(--text-muted);margin-bottom:6px">问题：q3 已可跑，但 MakeDecimal(long→decimal64) 仍走通用 CastExpr 语义，表达式开销偏高。</div>
+      <div class="d-desc" style="font-size:12px;color:var(--text-muted);margin-bottom:6px">文件：core/src/vectorization/ExprEval.cpp</div>
+      <div class="d-desc" style="font-size:12px;color:var(--text-muted)">改动：为 MakeDecimal(long→decimal64) 增加轻量快路径，跳过通用 CastExpr 路径开销。</div>
+      <div class="d-formula">ratio 变化：1.085 → 1.028（shuffle.partitions=64）</div>
+    </div>
+    <div class="d-section">
+      <div class="d-title">I 轮（commit ac184455）· raw buffer 直写</div>
+      <div class="d-desc" style="font-size:12px;color:var(--text-muted);margin-bottom:6px">问题：H 轮虽然缩小了差距，但 ExprEval 中仍有较多 GetValue/SetValue 式逐行访问。</div>
+      <div class="d-desc" style="font-size:12px;color:var(--text-muted);margin-bottom:6px">文件：core/src/vectorization/ExprEval.cpp</div>
+      <div class="d-check"><span class="ck">✓</span><p>将快路径进一步改为 raw buffer 读写</p></div>
+      <div class="d-check"><span class="ck">✓</span><p>无 null 且无 overflow 时直接 memcpy，消除逐行循环开销</p></div>
+      <div class="d-check"><span class="ck">✓</span><p>保留 overflow 检查与错误上报逻辑（正确性不降级）</p></div>
+      <div class="d-formula">Omni avg = 48.429s  ←→  Native avg = 49.171s
+ratio = 0.985（shuffle.partitions=64，纯代码优化）
+
+shuffle.partitions=48 时：ratio = 0.921</div>
+    </div>
+    <div class="d-section">
+      <div class="d-title">结论</div>
+      <div class="d-desc" style="font-size:12px;color:var(--text-muted)">代码优化本身已经有效，不依赖特殊参数即可达标。shuffle.partitions=48 是当前更稳的达标配置，但不是必要条件。</div>
+    </div>`
+  },
+
+  // ── E2E 日志详情 ──
+  'e2e-log': {
+    title: 'E2E 正确性验证 · 完整日志摘录',
+    sub: '三条 SQL 的 Native vs Omni 逐行对比结果',
+    body: `
+    <div class="d-section">
+      <div class="d-title">q1 · INT key 低基数（ss_store_sk）</div>
+      <div class="d-desc" style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Omni App: <code>local-1774963186870</code> · Native App: <code>local-1774963173419</code></div>
+      <div class="d-code">ss_store_sk  item_set_size  cnt       total_price
+NULL         204000         12950651  245184922.72
+1            201285         1360964   50348881.10
+2            201367         1367762   50548614.84
+4            201333         1364773   50460104.94
+7            201252         1362266   50419772.38
+8            201295         1363940   50485268.04
+10           201277         1363725   50380840.91
+13           201321         1371660   50696911.27
+14           201180         1365534   50483959.43
+16           201171         1366147   50549054.59</div>
+      <div class="d-check"><span class="ck">✓</span><p>Native / Omni 十行结果完全一致</p></div>
+      <div class="d-check"><span class="ck">✓</span><p>OmniSortAggregateExecTransformer ×4 命中</p></div>
+    </div>
+    <div class="d-section">
+      <div class="d-title">q2 · VARCHAR key + JOIN（s_city）</div>
+      <div class="d-desc" style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Omni App: <code>local-1774962834752</code> · Native App: <code>local-1774962823518</code></div>
+      <div class="d-code">s_city          cust_set_size  cnt       avg_paid
+NULL            329890         4111115   1720.212653
+Bethel          1136453        19139774  1721.310157
+Centerville     762360         10949740  1722.369131
+Fairview        1361103        26014254  1721.362286
+Five Points     763649         10954890  1721.414438
+Greenwood       1082975        17779392  1721.847624
+Liberty         1136511        19145866  1720.633207
+Midway          1136469        19147654  1720.527151
+Mount Pleasant  761872         10939843  1721.101651
+New Hope        834788         12328614  1720.646974</div>
+      <div class="d-check"><span class="ck">✓</span><p>Native / Omni 十行结果完全一致</p></div>
+      <div class="d-check"><span class="ck">✓</span><p>OmniSortAggregateExecTransformer ×4 + BroadcastHashJoin ×2</p></div>
+    </div>
+    <div class="d-section">
+      <div class="d-title">q3 · INT key 高基数（ss_hdemo_sk）</div>
+      <div class="d-desc" style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Omni App: <code>local-1774962951641</code> · Native App: <code>local-1774962952076</code></div>
+      <div class="d-code">ss_hdemo_sk  item_set_size  cnt       total_price
+NULL         204000         12957139  245251985.52
+1            34448          38393     1426570.39
+2            34446          38220     1404709.83
+3            34192          38411     1416501.83
+4            33967          38044     1415267.27
+5            34427          38691     1438996.51
+6            35335          39185     1444074.04
+7            33554          37477     1386759.73
+8            34200          38632     1422595.91
+9            34438          38331     1425907.15</div>
+      <div class="d-check"><span class="ck">✓</span><p>Native / Omni 十行结果完全一致</p></div>
+      <div class="d-check"><span class="ck">✓</span><p>OmniSortAggregateExecTransformer ×4 命中</p></div>
+    </div>
+    <div class="d-section">
+      <div class="d-title">执行计划链接</div>
+      <div class="d-desc" style="font-size:11px;color:var(--text-muted);line-height:1.8">
+        q1 Omni: <a href="http://173.50.1.2:18080/history/local-1774963186870/SQL/" target="_blank" style="color:var(--accent)">History Server →</a><br>
+        q2 Omni: <a href="http://173.50.1.2:18080/history/local-1774962834752/SQL/" target="_blank" style="color:var(--accent)">History Server →</a><br>
+        q3 Omni: <a href="http://173.50.1.2:18080/history/local-1774962951641/SQL/" target="_blank" style="color:var(--accent)">History Server →</a>
+      </div>
+    </div>`
+  }
+};
+</script>
+</body>
+</html>

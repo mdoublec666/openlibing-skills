@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>算子开发 Agent 自迭代系统</title>
+<style>
+/* ── THEME: Light · 暖珊瑚 ── */
+:root {
+  --bg:       #FAF9F7;
+  --surface:  #FFFFFF;
+  --surface2: #F0EDE8;
+  --border:   #E0D9D0;
+  --accent:   #D97757;
+  --accent2:  #2E7D52;
+  --accent3:  #C94B4B;
+  --accent4:  #7C5CBF;
+  --text:       #1A1817;
+  --text-muted: #6B6560;
+  --text-dim:   #B0A89E;
+  --code-bg:   #F0EDE8;
+  --code-text: #7C5CBF;
+  --bar-red:    rgba(201,75,75,.65);
+  --bar-yellow: rgba(193,138,28,.75);
+  --bar-green:  rgba(46,125,82,.72);
+  /* Shadows */
+  --shadow-card: 0 1px 4px rgba(26,24,23,.06), 0 4px 16px rgba(26,24,23,.05);
+  --shadow-float: 0 4px 20px rgba(26,24,23,.10), 0 1px 4px rgba(26,24,23,.06);
+}
+
+/* ── RESET & BODY ── */
+* { margin:0; padding:0; box-sizing:border-box; }
+html,body {
+  width:100%; height:100%;
+  font-family:-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;
+  /* 暖珊瑚 签名：点阵纹理 + 顶部暖晕 */
+  background-color: #FAF9F7;
+  background-image:
+    radial-gradient(circle, rgba(26,24,23,.055) 1px, transparent 1px),
+    radial-gradient(ellipse 90% 55% at 50% -5%, rgba(217,119,87,.1) 0%, transparent 65%);
+  background-size: 28px 28px, 100% 100%;
+  color:var(--text);
+  overflow:hidden;
+}
+
+/* ── DECK & SLIDES ── */
+.deck { width:100%; height:100vh; position:relative; }
+.slide { position:absolute; inset:0; display:flex; flex-direction:column; justify-content:center; align-items:center; padding:48px 80px; opacity:0; pointer-events:none; transition:opacity .4s ease; }
+.slide.active { opacity:1; pointer-events:auto; }
+.slide-inner { width:100%; max-width:1100px; }
+
+/* ── NAV — 纯白浮动胶囊，无描边 ── */
+.nav { position:fixed; bottom:28px; left:50%; transform:translateX(-50%); display:flex; align-items:center; gap:16px; z-index:200; background:rgba(255,255,255,.97); backdrop-filter:blur(16px); padding:10px 22px; border-radius:100px; box-shadow:var(--shadow-float); }
+.nav button { background:none; border:none; color:var(--text-muted); font-size:18px; cursor:pointer; padding:4px 8px; border-radius:8px; transition:color .2s,background .2s; }
+.nav button:hover { color:var(--accent); background:var(--surface2); }
+.nav button:disabled { opacity:.25; cursor:default; }
+.nav .counter { font-size:13px; color:var(--text-muted); min-width:52px; text-align:center; }
+.dots { display:flex; gap:6px; }
+.dot { width:7px; height:7px; border-radius:50%; background:var(--border); cursor:pointer; transition:background .2s,transform .2s; }
+.dot.active { background:var(--accent); transform:scale(1.3); }
+.kbd-hint { position:fixed; top:20px; right:28px; font-size:11px; color:var(--text-dim); letter-spacing:.5px; z-index:100; }
+
+/* ── TYPOGRAPHY ── */
+/* label 前面改成小圆点而不是横线 */
+.label { font-size:11px; letter-spacing:2px; text-transform:uppercase; color:var(--text-muted); margin-bottom:18px; display:flex; align-items:center; gap:10px; }
+.label::before { content:''; display:block; width:6px; height:6px; border-radius:50%; background:var(--accent); flex-shrink:0; }
+h1 { font-size:clamp(32px,4vw,52px); font-weight:700; line-height:1.1; letter-spacing:-1px; color:var(--text); }
+h2 { font-size:clamp(20px,2.6vw,34px); font-weight:700; line-height:1.2; margin-bottom:22px; color:var(--text); }
+h3 { font-size:15px; font-weight:600; color:var(--accent); margin-bottom:8px; }
+p,li { font-size:15px; line-height:1.75; color:var(--text-muted); }
+/* code 保留等宽但去掉那种"开发工具"的观感 */
+code { font-family:'SF Mono','Fira Code',monospace; font-size:11.5px; background:var(--code-bg); color:var(--code-text); padding:2px 7px; border-radius:5px; font-weight:500; }
+
+/* ── GRIDS ── */
+.grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:20px; width:100%; max-width:1100px; }
+.grid-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:18px; width:100%; max-width:1100px; }
+
+/* ── CARDS — shadow 代替 border，accent 用左侧色条 ── */
+.card { background:var(--surface); border-radius:16px; padding:22px; box-shadow:var(--shadow-card); }
+/* accent 卡片：白底 + 左侧 3px 色条 + 对应色调 shadow */
+.card.accent-blue   { background:var(--surface); border-left:3px solid var(--accent);  box-shadow:0 1px 4px rgba(217,119,87,.1), 0 4px 20px rgba(217,119,87,.07); }
+.card.accent-green  { background:var(--surface); border-left:3px solid var(--accent2); box-shadow:0 1px 4px rgba(46,125,82,.1),  0 4px 20px rgba(46,125,82,.07); }
+.card.accent-orange { background:var(--surface); border-left:3px solid var(--accent3); box-shadow:0 1px 4px rgba(201,75,75,.1),  0 4px 20px rgba(201,75,75,.07); }
+.card.accent-purple { background:var(--surface); border-left:3px solid var(--accent4); box-shadow:0 1px 4px rgba(124,92,191,.1), 0 4px 20px rgba(124,92,191,.07); }
+.card h3 { font-size:14px; color:var(--text); margin-bottom:8px; }
+.card p,.card li { font-size:13px; color:var(--text-muted); line-height:1.65; }
+.card ul { padding-left:16px; }
+.card ul li { margin-bottom:5px; }
+
+/* ── FLOW STEPS — shadow 卡片风，gate 用顶部色条 ── */
+.flow { display:flex; align-items:stretch; gap:0; width:100%; max-width:1100px; flex-wrap:nowrap; margin-bottom:18px; }
+.flow-step { flex:1; background:var(--surface); border-radius:12px; padding:16px 12px; text-align:center; min-width:0; box-shadow:var(--shadow-card); }
+/* gate 步骤：顶部橙红色条表示"卡点" */
+.flow-step.gate { border-top:3px solid var(--accent3); box-shadow:0 1px 4px rgba(201,75,75,.1), 0 4px 16px rgba(201,75,75,.07); padding-top:13px; }
+.flow-step .num  { font-size:10px; color:var(--accent); letter-spacing:1px; margin-bottom:6px; font-weight:600; }
+.flow-step.gate .num { color:var(--accent3); }
+.flow-step .title { font-size:12px; font-weight:600; color:var(--text); margin-bottom:4px; }
+.flow-step .desc  { font-size:10px; color:var(--text-muted); line-height:1.5; }
+.flow-arrow { color:var(--text-dim); font-size:14px; padding:0 5px; flex-shrink:0; display:flex; align-items:center; }
+
+/* ── TIMELINE ── */
+.timeline { width:100%; max-width:980px; }
+.tl-item { display:flex; gap:18px; margin-bottom:16px; align-items:flex-start; }
+.tl-left { text-align:right; min-width:72px; padding-top:3px; }
+.tl-round { font-size:10px; font-weight:700; color:var(--accent); letter-spacing:1px; }
+.tl-dot-wrap { display:flex; flex-direction:column; align-items:center; }
+.tl-dot { width:11px; height:11px; border-radius:50%; background:var(--accent); flex-shrink:0; margin-top:3px; box-shadow:0 0 0 3px rgba(217,119,87,.15); }
+.tl-dot.green  { background:var(--accent2); box-shadow:0 0 0 3px rgba(46,125,82,.15); }
+.tl-dot.orange { background:var(--accent3); box-shadow:0 0 0 3px rgba(201,75,75,.15); }
+.tl-dot.purple { background:var(--accent4); box-shadow:0 0 0 3px rgba(124,92,191,.15); }
+.tl-line { width:1px; flex:1; background:linear-gradient(to bottom, var(--border), transparent); min-height:20px; }
+/* timeline 卡片也改为 shadow */
+.tl-content { flex:1; background:var(--surface); border-radius:12px; padding:13px 16px; box-shadow:var(--shadow-card); }
+.tl-title { font-size:13px; font-weight:600; color:var(--text); margin-bottom:4px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.tl-desc  { font-size:12px; color:var(--text-muted); line-height:1.65; }
+/* badge 改为填充风格 */
+.tl-badge { display:inline-block; font-size:10px; padding:2px 8px; border-radius:100px; background:var(--accent2); color:#fff; font-weight:500; }
+.tl-badge.orange { background:var(--accent3); color:#fff; }
+.tl-badge.purple { background:var(--accent4); color:#fff; }
+
+/* ── PERF BARS — 更圆润，去掉 monospace ── */
+.perf-row { display:flex; align-items:center; gap:12px; margin-bottom:11px; }
+.perf-label { font-size:11px; color:var(--text-muted); min-width:130px; text-align:right; }
+.perf-bar-wrap { flex:1; height:18px; background:var(--surface2); border-radius:100px; overflow:hidden; }
+.perf-bar { height:100%; border-radius:100px; display:flex; align-items:center; padding-left:10px; font-size:10px; font-weight:600; white-space:nowrap; color:#fff; letter-spacing:.3px; }
+.perf-bar.red    { background:var(--bar-red); }
+.perf-bar.yellow { background:var(--bar-yellow); }
+.perf-bar.green  { background:var(--bar-green); }
+
+/* ── STATS — 去掉 border，去掉 monospace，数字更大更呼吸 ── */
+.stats { display:flex; gap:14px; }
+.stat { background:var(--surface); border-radius:14px; padding:18px 16px; text-align:center; flex:1; box-shadow:var(--shadow-card); }
+.stat .val { font-size:30px; font-weight:700; color:var(--accent); letter-spacing:-0.5px; }
+.stat .val.green { color:var(--accent2); }
+.stat .unit { font-size:11px; color:var(--text-dim); margin-top:4px; line-height:1.5; }
+
+/* ── TABLES — 去掉背景色，改为底部线条分隔 ── */
+table { width:100%; border-collapse:collapse; font-size:12px; }
+th { background:transparent; color:var(--text-muted); font-weight:600; font-size:10px; letter-spacing:1px; text-transform:uppercase; padding:8px 12px; text-align:left; border-bottom:2px solid var(--border); }
+td { padding:9px 12px; border-bottom:1px solid rgba(224,217,208,.6); color:var(--text-muted); }
+tr:last-child td { border-bottom:none; }
+.cell-ok { color:var(--accent2); font-weight:600; }
+
+/* ── COVER ── */
+.cover { text-align:center; }
+/* kicker 改为实心珊瑚色 pill，白色文字 */
+.kicker { display:inline-flex; align-items:center; gap:8px; font-size:11px; letter-spacing:1.5px; text-transform:uppercase; color:#fff; background:var(--accent); padding:7px 18px; border-radius:100px; margin-bottom:36px; font-weight:500; }
+.cover h1 { max-width:820px; margin:0 auto 22px; }
+.cover h1 span { color:var(--accent); }
+.cover .sub { color:var(--text-muted); font-size:16px; margin-bottom:52px; line-height:1.6; }
+.cover .tags { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+/* tags 改为实心浅色填充，无描边 */
+.tag { font-size:12px; padding:5px 14px; border-radius:100px; color:var(--text-muted); background:rgba(26,24,23,.06); font-weight:500; }
+.tag.green  { color:var(--accent2); background:rgba(46,125,82,.1); }
+.tag.coral  { color:var(--accent);  background:rgba(217,119,87,.12); }
+.tag.purple { color:var(--accent4); background:rgba(124,92,191,.1); }
+
+/* ── BANNER — 换成暖珊瑚调，去掉紫色 ── */
+.banner { width:100%; max-width:1100px; border-radius:12px; padding:13px 18px; display:flex; align-items:center; gap:12px; margin-top:16px; font-size:12px; color:var(--text-muted); background:rgba(217,119,87,.07); border-left:3px solid var(--accent); box-shadow:var(--shadow-card); }
+
+/* ── CONCLUSION ── */
+.conclusion-wrap { width:100%; max-width:900px; text-align:center; }
+.sep { width:32px; height:2px; background:var(--accent); border-radius:2px; margin:18px auto; opacity:.35; }
+/* pills 改为填充风格 */
+.pill { display:inline-flex; align-items:center; gap:6px; font-size:12px; padding:5px 14px; border-radius:100px; color:#fff; background:var(--accent); margin:3px; font-weight:500; }
+.pill.green  { background:var(--accent2); }
+.pill.purple { background:var(--accent4); }
+</style>
+</head>
+<body>
+
+<div class="deck" id="deck">
+
+<!-- ══ SLIDE 1 · 封面 ══ -->
+<div class="slide active cover">
+  <div class="kicker">🧪 实验性仓库 · KP_b016</div>
+  <h1>算子开发 <span>Agent</span> 自迭代系统</h1>
+  <p class="sub">以 SortAgg 算子为样本，验证 Agent 驱动算子全流程开发的可行性</p>
+  <div class="tags">
+    <span class="tag coral">operator-development Skill</span>
+    <span class="tag purple">omni-performance-improvement Skill</span>
+    <span class="tag green">spark-remote-test MCP</span>
+    <span class="tag">OmniOperator + Gluten</span>
+    <span class="tag">ARM64 · 鲲鹏</span>
+  </div>
+</div>
+
+<!-- ══ SLIDE 2 · 背景与命题 ══ -->
+<div class="slide">
+  <div class="slide-inner">
+    <div class="label">背景</div>
+    <h2>算子开发为什么难以自动化？</h2>
+    <div class="grid-2">
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="card accent-orange">
+          <div style="font-size:26px;margin-bottom:10px">🔗</div>
+          <h3>链路长、跨仓库</h3>
+          <ul>
+            <li>Gluten Scala 开关 + Transformer</li>
+            <li>Substrait 协议转换（C++）</li>
+            <li>OmniOperator PlanNode / Factory / Operator（C++）</li>
+          </ul>
+        </div>
+        <div class="card">
+          <div style="font-size:26px;margin-bottom:10px">🔄</div>
+          <h3>迭代闭环依赖远端集群</h3>
+          <ul>
+            <li>ARM64 YARN 编译环境无法本地化</li>
+            <li>每次改动需触发远端编译 + E2E + 性能测试</li>
+            <li>火焰图采集、执行计划截图、ratio 计算……</li>
+          </ul>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="card accent-blue" style="flex:1">
+          <div style="font-size:26px;margin-bottom:10px">💡</div>
+          <h3 style="color:var(--accent)">核心命题</h3>
+          <p style="font-size:14px;color:var(--text);line-height:1.9">
+            能否让 Agent 完整驱动<br>
+            <strong style="color:var(--accent)">设计 → 实现 → 编译 → 测试 → 优化 → 交付</strong><br>
+            并在失败时自主诊断、自主迭代？
+          </p>
+        </div>
+        <div class="card accent-green" style="flex:1">
+          <div style="font-size:26px;margin-bottom:10px">🎯</div>
+          <h3 style="color:var(--accent2)">解法</h3>
+          <ul>
+            <li>2 个结构化 Skill 约束工作流</li>
+            <li>1 个 MCP 工具打通远端集群操作</li>
+            <li>SortAgg 作为端到端验证样本</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SLIDE 3 · 系统全景 ══ -->
+<div class="slide">
+  <div class="slide-inner">
+    <div class="label">系统设计</div>
+    <h2>三个核心组件</h2>
+    <div class="grid-3">
+      <div class="card accent-blue">
+        <div style="font-size:26px;margin-bottom:10px">🔧</div>
+        <h3 style="color:var(--accent)">spark-remote-test MCP</h3>
+        <p style="font-size:11px;color:var(--text-muted);margin-bottom:10px">SSH 远端 YARN 集群，暴露完整 CI 能力给 Agent</p>
+        <ul>
+          <li><code>compile_omni</code> / <code>compile_gluten</code></li>
+          <li><code>run_e2e_sql</code> — 算子命中 + 结果校验</li>
+          <li><code>run_spark_test_operator</code> — 性能测量</li>
+          <li><code>fetch_spark_flame_graphs</code> — 火焰图拉取</li>
+        </ul>
+      </div>
+      <div class="card accent-green">
+        <div style="font-size:26px;margin-bottom:10px">📋</div>
+        <h3 style="color:var(--accent2)">operator-development</h3>
+        <p style="font-size:11px;color:var(--text-muted);margin-bottom:10px">6 步强制工作流 · 文档卡点约束</p>
+        <ul>
+          <li>现状分析 + 三件套验证</li>
+          <li>文档前置（实现前必须落盘）</li>
+          <li>分层实现（Gluten → Substrait → Omni）</li>
+          <li>UT + E2E + 执行计划验证</li>
+          <li>性能验收 + 交付归档</li>
+        </ul>
+      </div>
+      <div class="card accent-purple">
+        <div style="font-size:26px;margin-bottom:10px">📊</div>
+        <h3 style="color:var(--accent4)">omni-performance-improvement</h3>
+        <p style="font-size:11px;color:var(--text-muted);margin-bottom:10px">4 阶段 Playbook · 证据驱动优化</p>
+        <ul>
+          <li>Baseline → Profiling → Diagnose → Optimize</li>
+          <li>先画像后改代码（硬性规则）</li>
+          <li>优化后正确性回归验证</li>
+          <li>三方 A/B 对比 + 可回退结论</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SLIDE 4 · 算子开发工作流 ══ -->
+<div class="slide">
+  <div class="slide-inner">
+    <div class="label">operator-development Skill</div>
+    <h2>6 步强制工作流</h2>
+    <div class="flow">
+      <div class="flow-step">
+        <div class="num">STEP 0–1</div>
+        <div class="title">现状分析</div>
+        <div class="desc">grep 扫描现有实现<br>E2E 三件套基线验证</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step gate">
+        <div class="num">STEP 2 · 卡点</div>
+        <div class="title">文档先行</div>
+        <div class="desc">context 文档<br>+ 测试设计<br>+ 部分 UT 用例</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="num">STEP 3</div>
+        <div class="title">分层实现</div>
+        <div class="desc">Gluten Scala<br>Substrait C++<br>OmniOp C++</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="num">STEP 4</div>
+        <div class="title">编译 + 验证</div>
+        <div class="desc">compile → UT<br>E2E → 执行计划截图</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="num">STEP 5</div>
+        <div class="title">性能优化</div>
+        <div class="desc">TPC-DS 大表<br>ratio &lt; 1.0 达标</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="num">STEP 6</div>
+        <div class="title">交付归档</div>
+        <div class="desc">日志 + 火焰图<br>性能报告归档</div>
+      </div>
+    </div>
+    <div class="banner">
+      <span style="font-size:18px;flex-shrink:0">🔒</span>
+      <span><strong style="color:var(--accent4)">卡点设计哲学：</strong>通过强制文档前置、测试设计前置、部分 UT 用例先落盘等硬性规则约束 Agent 行为——防止跳步是 Skill 设计的核心关切，不依赖 Agent 自律。</span>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SLIDE 5 · 性能优化 Playbook ══ -->
+<div class="slide">
+  <div class="slide-inner">
+    <div class="label">omni-performance-improvement Skill</div>
+    <h2>性能优化 4 阶段 Playbook</h2>
+    <div class="grid-2">
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="card accent-blue">
+          <h3 style="color:var(--accent)">Phase 1 · Baseline</h3>
+          <ul>
+            <li>SQL 设计 → E2E 验证算子命中 → 执行时间调校</li>
+            <li>Native / Omni 各跑 5 次（1 冷 + 4 热），取均值</li>
+            <li>TPC-DS store_sales 约 2.87 亿行大表</li>
+          </ul>
+        </div>
+        <div class="card accent-blue">
+          <h3 style="color:var(--accent)">Phase 2 · Profiling</h3>
+          <ul>
+            <li>async-profiler 火焰图（Omni + Native 各一份）</li>
+            <li>执行计划抓取（算子耗时 / Stage 分布）</li>
+            <li>Stage 级 Duration / GC / Shuffle 分析</li>
+          </ul>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="card">
+          <h3>Phase 3 · Diagnose</h3>
+          <ul>
+            <li>计算热点 / 内存分配 / null 低效 / 倾斜 / 锁竞争</li>
+            <li>主瓶颈 + 次瓶颈，每个结论必须有证据支撑</li>
+            <li>禁止无画像直接修改代码</li>
+          </ul>
+        </div>
+        <div class="card accent-green">
+          <h3 style="color:var(--accent2)">Phase 4 · Optimize + Validate</h3>
+          <ul>
+            <li>单一瓶颈对应优化方案，同步补充 UT</li>
+            <li style="color:var(--accent2)"><strong>优化后正确性 E2E 回归（本轮新增）</strong></li>
+            <li>三方对比（Native / Omni-Before / Omni-After）</li>
+            <li>可回退，有结论，沉淀 case-study</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SLIDE 6 · SortAgg 迭代历程 ══ -->
+<div class="slide">
+  <div style="width:100%;max-width:980px">
+    <div class="label">验证样本 · SortAgg</div>
+    <h2>Agent 自主完成的 5 个阶段 · 共 9 轮迭代</h2>
+    <div class="timeline">
+
+      <div class="tl-item">
+        <div class="tl-left"><span class="tl-round">A</span></div>
+        <div class="tl-dot-wrap"><div class="tl-dot"></div><div class="tl-line"></div></div>
+        <div class="tl-content">
+          <div class="tl-title">基础功能修复</div>
+          <div class="tl-desc">补齐 DestroyAggStates / ResetAggStates，解决内存泄漏与 MEM_CAP_EXCEEDED；关闭 Omni columnar shuffle 对 ArrayType 的错误路由</div>
+        </div>
+      </div>
+
+      <div class="tl-item">
+        <div class="tl-left"><span class="tl-round">B–D</span></div>
+        <div class="tl-dot-wrap"><div class="tl-dot"></div><div class="tl-line"></div></div>
+        <div class="tl-content">
+          <div class="tl-title">正确性收敛 <span class="tl-badge">E2E 稳定</span></div>
+          <div class="tl-desc">collect_set null 路径快速退出；Sort 规划稳定命中 OmniSortAggregateExecTransformer；Fallback 收敛至预期算子范围</div>
+        </div>
+      </div>
+
+      <div class="tl-item">
+        <div class="tl-left"><span class="tl-round">E–F</span></div>
+        <div class="tl-dot-wrap"><div class="tl-dot green"></div><div class="tl-line"></div></div>
+        <div class="tl-content">
+          <div class="tl-title">类型覆盖完善 <span class="tl-badge">DECIMAL64</span></div>
+          <div class="tl-desc">KeysEqual switch 补齐 OMNI_DECIMAL64 分支，消除高频 throw；collect_set grouped 路径 offset 修复，12 个 SortAgg UT 全通</div>
+        </div>
+      </div>
+
+      <div class="tl-item">
+        <div class="tl-left"><span class="tl-round">G</span></div>
+        <div class="tl-dot-wrap"><div class="tl-dot orange"></div><div class="tl-line"></div></div>
+        <div class="tl-content">
+          <div class="tl-title">运行时 Bug 自主定位 <span class="tl-badge orange">自愈示例</span></div>
+          <div class="tl-desc">q3 运行期报 "Vector function not found for MakeDecimal" → Agent 自主定位 vector path 缺失 → 接通 CastExpr 向量化路径 → q3 从运行失败恢复为可执行（ratio 1.085）</div>
+        </div>
+      </div>
+
+      <div class="tl-item">
+        <div class="tl-left"><span class="tl-round">H–I</span></div>
+        <div class="tl-dot-wrap"><div class="tl-dot purple"></div></div>
+        <div class="tl-content">
+          <div class="tl-title">性能突破 <span class="tl-badge purple">ratio 1.085 → 0.985</span></div>
+          <div class="tl-desc">long→decimal64 轻量快路径；memcpy 替代逐行 GetValue/SetValue（raw buffer 优化）；q3 最终 ratio 0.985，突破 &lt;1.0 目标</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ══ SLIDE 7 · 性能结果 ══ -->
+<div class="slide">
+  <div class="slide-inner">
+    <div class="label">验证结果 · 性能</div>
+    <h2>三条 SQL 全部 ratio &lt; 1.0</h2>
+    <div class="grid-2" style="align-items:center">
+
+      <!-- 左：优化路径条形图 -->
+      <div>
+        <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;font-weight:500">q1 优化路径（低基数，2.87 亿行）</p>
+        <div class="perf-row"><span class="perf-label">初始（无优化）</span><div class="perf-bar-wrap"><div class="perf-bar red" style="width:100%">ratio 3.2</div></div></div>
+        <div class="perf-row"><span class="perf-label">Opt1 · ProcessGroup</span><div class="perf-bar-wrap"><div class="perf-bar yellow" style="width:48%">1.53</div></div><span style="font-size:10px;color:var(--text-dim)">288M→70k 次</span></div>
+        <div class="perf-row"><span class="perf-label">Opt2 · 零分配比较</span><div class="perf-bar-wrap"><div class="perf-bar yellow" style="width:52%">1.65</div></div><span style="font-size:10px;color:var(--text-dim)">噪声内</span></div>
+        <div class="perf-row"><span class="perf-label">Opt3 · 批量输出</span><div class="perf-bar-wrap"><div class="perf-bar green" style="width:31%">0.993 ✅</div></div><span style="font-size:10px;color:var(--text-dim)">JNI 1000→1</span></div>
+
+        <p style="font-size:12px;color:var(--text-muted);margin:18px 0 10px;font-weight:500">q3 修复路径（高基数 + MakeDecimal）</p>
+        <div class="perf-row"><span class="perf-label">运行时失败</span><div class="perf-bar-wrap" style="display:flex;align-items:center;padding-left:10px"><span style="font-size:11px;color:var(--accent3)">❌ MakeDecimal 无 vector path</span></div></div>
+        <div class="perf-row"><span class="perf-label">G 轮修复后</span><div class="perf-bar-wrap"><div class="perf-bar yellow" style="width:34%">1.085</div></div></div>
+        <div class="perf-row"><span class="perf-label">H–I 轮优化后</span><div class="perf-bar-wrap"><div class="perf-bar green" style="width:31%">0.985 ✅</div></div></div>
+      </div>
+
+      <!-- 右：2×2 结果卡片，与左列等高 -->
+      <div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="stat">
+            <div class="val green">0.993</div>
+            <div class="unit">q1 · INT 低基数<br>8.238s vs 8.299s</div>
+          </div>
+          <div class="stat">
+            <div class="val green">0.849</div>
+            <div class="unit">q2 · VARCHAR + JOIN<br>9.873s vs 11.635s</div>
+          </div>
+          <div class="stat">
+            <div class="val green">0.985</div>
+            <div class="unit">q3 · INT 高基数<br>48.429s vs 49.171s</div>
+          </div>
+          <!-- 综合 ratio：左侧绿色色条突出 -->
+          <div class="stat" style="border-left:3px solid var(--accent2);box-shadow:0 1px 4px rgba(46,125,82,.12),0 4px 20px rgba(46,125,82,.08)">
+            <div class="val green" style="font-size:34px">0.963</div>
+            <div class="unit" style="color:var(--accent2);font-weight:600">综合 ratio<br>三条 SQL 全达标</div>
+          </div>
+        </div>
+        <p style="font-size:10px;color:var(--text-dim);margin-top:12px;line-height:1.7;text-align:center">TPC-DS SF100 · 2.87亿行 · YARN 34 executor × 8 cores · ARM64 鲲鹏 · 每轮 5 次（1冷+4热）均值</p>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ══ SLIDE 8 · 自迭代能力验证 ══ -->
+<div class="slide">
+  <div class="slide-inner">
+    <div class="label">能力验证</div>
+    <h2>自迭代能力的四个具体体现</h2>
+    <div class="grid-2">
+      <div class="card accent-blue">
+        <div style="font-size:24px;margin-bottom:10px">🔁</div>
+        <h3 style="color:var(--accent)">失败自愈</h3>
+        <p>compile_omni 失败 → 读编译错误 → 定位问题 → 修改代码 → 重编译；q3 运行期报 MakeDecimal not found → 定位 vector path 缺失 → 三轮递进修复，全程无人工介入。</p>
+      </div>
+      <div class="card accent-green">
+        <div style="font-size:24px;margin-bottom:10px">📈</div>
+        <h3 style="color:var(--accent2)">证据驱动决策</h3>
+        <p>每次性能优化前必须先采集火焰图。Opt3 关键突破（JNI 调用 1000→1 次）来自火焰图中 GetOutput 热点识别，而非猜测。硬性规则：没有画像不允许改代码。</p>
+      </div>
+      <div class="card accent-purple">
+        <div style="font-size:24px;margin-bottom:10px">📄</div>
+        <h3 style="color:var(--accent4)">跨轮次记忆</h3>
+        <p>每轮迭代的中间数据、当前 ratio、下一步方向全部通过文档持久化（modification_trace、perf report）。不依赖上下文窗口，状态显式管理，轮次间无信息丢失。</p>
+      </div>
+      <div class="card accent-orange">
+        <div style="font-size:24px;margin-bottom:10px">🔒</div>
+        <h3 style="color:var(--accent3)">卡点有效性</h3>
+        <p>Skill 中的强制文档卡点被实际遵守：context_sortagg.md 与 self_validation_sortagg.md 先于任何实现代码存在且内容完整。卡点不是建议，是约束。</p>
+      </div>
+    </div>
+    <div class="banner">
+      <span style="font-size:18px;flex-shrink:0">✅</span>
+      <span>全程 Agent 自主完成 <strong style="color:var(--text)">A–I 共 9 轮迭代</strong>，涵盖功能修复、类型覆盖、运行时 Bug、性能优化，<strong style="color:var(--accent2)">无人工介入</strong></span>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SLIDE 9 · 交付物清单 ══ -->
+<div class="slide">
+  <div class="slide-inner">
+    <div class="label">交付完整性</div>
+    <h2>SortAgg 交付物清单</h2>
+    <div class="grid-2" style="align-items:start">
+      <div>
+        <table>
+          <thead><tr><th>交付项</th><th>状态</th></tr></thead>
+          <tbody>
+            <tr><td>需求设计文档 context_sortagg.md</td><td class="cell-ok">✅ 完成</td></tr>
+            <tr><td>测试设计文档 self_validation_sortagg.md</td><td class="cell-ok">✅ 完成</td></tr>
+            <tr><td>Gluten Scala 实现</td><td class="cell-ok">✅ 完成</td></tr>
+            <tr><td>OmniOperator C++ 实现</td><td class="cell-ok">✅ 完成</td></tr>
+            <tr><td>UT 编译通过（8541 tests）</td><td class="cell-ok">✅ 12 个 SortAgg UT 全通</td></tr>
+            <tr><td>E2E 验证（Fallback=0）</td><td class="cell-ok">✅ ×4 命中，三条 SQL 一致</td></tr>
+            <tr><td>性能优化报告（3 轮 + q3 专项）</td><td class="cell-ok">✅ 完成</td></tr>
+            <tr><td>火焰图归档（before / after / opt3）</td><td class="cell-ok">✅ 完成</td></tr>
+            <tr><td>编译 / E2E / 性能日志全量归档</td><td class="cell-ok">✅ 完成</td></tr>
+            <tr><td>修改追踪记录（A–I 轮）</td><td class="cell-ok">✅ 完成</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="card accent-green">
+          <h3 style="color:var(--accent2)">功能覆盖亮点</h3>
+          <ul>
+            <li>PARTIAL / FINAL / SINGLE / COMPLETE 全覆盖</li>
+            <li>collect_set / collect_list / COUNT / SUM / AVG / MIN / MAX</li>
+            <li>NULL key 语义 / 无 GROUP BY / 跨 batch 边界 / Aggregate Filter</li>
+            <li>Group-by key 类型：16 种（含 DECIMAL64 修复）</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>已知遗留 Gap（诚实列出）</h3>
+          <ul>
+            <li>collect_set(MAP 元素) — 实现复杂度高，暂未覆盖</li>
+            <li>Spill 路径 — 未进行专项验证</li>
+            <li>复杂类型 ARRAY / ROW 作为 group-by key</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SLIDE 10 · 结论与展望 ══ -->
+<div class="slide">
+  <div class="conclusion-wrap">
+    <div class="label" style="justify-content:center">结论</div>
+    <div style="display:flex;gap:28px;justify-content:center;margin:20px 0 10px">
+      <div style="text-align:center">
+        <div style="font-size:48px;font-weight:800;font-family:monospace;color:var(--accent2);line-height:1">0.993</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:5px">q1 · INT 低基数</div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:48px;font-weight:800;font-family:monospace;color:var(--accent2);line-height:1">0.849</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:5px">q2 · VARCHAR + JOIN</div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:48px;font-weight:800;font-family:monospace;color:var(--accent2);line-height:1">0.985</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:5px">q3 · INT 高基数</div>
+      </div>
+    </div>
+    <p style="font-size:12px;color:var(--text-dim);margin-bottom:18px">latency_ratio = Omni_avg / Native_avg &nbsp;·&nbsp; &lt;1.0 = Omni 更快 &nbsp;·&nbsp; 综合 ratio = <strong>0.963</strong></p>
+    <p style="font-size:15px;color:var(--text-muted);max-width:700px;margin:0 auto 22px;line-height:1.8;font-style:italic">
+      「这套系统验证了 Agent 在算子开发领域具备从零到交付、从失败到自愈、从不可跑到达标的完整迭代能力。SortAgg 是第一个端到端样本，三条 SQL 全部 ratio &lt; 1.0，流程可复用到下一个算子。」
+    </p>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:22px">
+      <span class="pill green">三条 SQL 全部 ratio &lt; 1.0</span>
+      <span class="pill green">E2E 正确性全部通过</span>
+      <span class="pill green">综合 ratio 0.963</span>
+      <span class="pill purple">A–I 共 9 轮自主迭代</span>
+    </div>
+    <div class="sep"></div>
+    <p style="font-size:13px;color:var(--text-muted);margin-top:16px">
+      下一步：接入第二个算子验证 Skill 复用性 &nbsp;·&nbsp; expression-development 子流程补齐 &nbsp;·&nbsp; case-study 机制持续沉淀
+    </p>
+  </div>
+</div>
+
+</div><!-- /deck -->
+
+<!-- NAV -->
+<div class="nav">
+  <button id="prev" onclick="go(-1)" disabled>‹</button>
+  <div class="dots" id="dots"></div>
+  <span class="counter" id="counter"></span>
+  <button id="next" onclick="go(1)">›</button>
+</div>
+<div class="kbd-hint">← → 空格翻页</div>
+
+<script>
+const slides = document.querySelectorAll('.slide');
+const dotsEl = document.getElementById('dots');
+const counter = document.getElementById('counter');
+const prevBtn = document.getElementById('prev');
+const nextBtn = document.getElementById('next');
+let cur = 0;
+
+slides.forEach((_, i) => {
+  const d = document.createElement('div');
+  d.className = 'dot' + (i === 0 ? ' active' : '');
+  d.onclick = () => goTo(i);
+  dotsEl.appendChild(d);
+});
+counter.textContent = `1 / ${slides.length}`;
+
+function goTo(n) {
+  slides[cur].classList.remove('active');
+  dotsEl.children[cur].classList.remove('active');
+  cur = Math.max(0, Math.min(n, slides.length - 1));
+  slides[cur].classList.add('active');
+  dotsEl.children[cur].classList.add('active');
+  counter.textContent = `${cur + 1} / ${slides.length}`;
+  prevBtn.disabled = cur === 0;
+  nextBtn.disabled = cur === slides.length - 1;
+}
+function go(d) { goTo(cur + d); }
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); go(1); }
+  if (e.key === 'ArrowLeft') { e.preventDefault(); go(-1); }
+});
+</script>
+</body>
+</html>
