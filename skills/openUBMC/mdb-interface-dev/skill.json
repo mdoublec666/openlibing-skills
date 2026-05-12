@@ -1,0 +1,53 @@
+{
+  "name": "openubmc-mdb-interface-dev",
+  "version": "1.0.0",
+  "description": "开发 openUBMC 的 MDB/D-Bus 资源协作接口，包括 mdb_interface 接口定义、MDS 数据建模、bingo gen 代码自动生成、RPC 方法实现、跨组件通信和 IPMI 命令开发。",
+  "author": "OpenUBMC Team",
+  "license": "MulanPSL-2.0",
+  "openubmc": {
+    "minVersion": "1.0.0",
+    "maxVersion": "2.0.0",
+    "components": ["mdb", "mdb_interface", "dbus", "bingo", "skynet", "lua-sdk"]
+  },
+  "dependencies": {
+    "bingo-cli": ">=1.0.0",
+    "conan": ">=2.0.0",
+    "mdb_interface": ">=1.0.0",
+    "dbus": ">=1.12"
+  },
+  "files": [
+    "SKILL.md",
+    "skill.json"
+  ],
+  "keywords": [
+    "mdb",
+    "mdb_interface",
+    "dbus",
+    "mds",
+    "model.json",
+    "service.json",
+    "ipmi",
+    "rpc",
+    "bingo",
+    "code-generation",
+    "interface",
+    "openubmc"
+  ],
+  "categories": [
+    "development",
+    "interface",
+    "dbus"
+  ],
+  "usage": {
+    "prompts": [
+      "定义MDB资源协作接口",
+      "model.json配置MDS对象",
+      "service.json跨组件依赖",
+      "bingo gen代码自动生成",
+      "实现RPC方法回调",
+      "IPMI命令开发",
+      "属性订阅与信号监听",
+      "types.json复杂类型定义"
+    ]
+  }
+}

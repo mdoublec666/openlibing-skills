@@ -1,0 +1,47 @@
+{
+  "name": "csr-conf-dict-from-mds",
+  "version": "1.0.0",
+  "description": "根据组件 MDS model.json 生成或更新 CSR 配置字典说明文档；版式由 skill 内 templates/ 与 examples/ 拼装，不依赖外部 docs；属性详表仅 usage 含 CSR；以类名为唯一标识；输出路径可指定或自动定位 docs 仓 csr_conf_dict/object。",
+  "author": "OpenUBMC Team",
+  "license": "MulanPSL-2.0",
+  "openubmc": {
+    "minVersion": "1.0.0",
+    "components": ["mds", "csr", "docs"]
+  },
+  "dependencies": {
+    "markdown": "any"
+  },
+  "files": [
+    "SKILL.md",
+    "skill.json",
+    "component-sig-mapping.json",
+    "templates/STRUCTURE.md",
+    "templates/document_head.md",
+    "templates/section_attributes_block.md",
+    "templates/fragment_linkage_classification.md",
+    "templates/fragment_suffix_examples_guide.md",
+    "examples/complete_example.md"
+  ],
+  "keywords": [
+    "csr",
+    "csr_conf_dict",
+    "model.json",
+    "mds",
+    "documentation",
+    "openubmc",
+    "sig",
+    "配置字典"
+  ],
+  "categories": [
+    "documentation",
+    "development"
+  ],
+  "usage": {
+    "prompts": [
+      "根据 model.json 生成 CSR 配置字典文档",
+      "生成 csr_conf_dict object 文档",
+      "更新 xxx 类配置字典说明",
+      "从 MDS 模型生成配置指导"
+    ]
+  }
+}

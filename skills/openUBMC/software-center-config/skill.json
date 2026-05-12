@@ -1,0 +1,9 @@
+{
+  "name": "software-center-config",
+  "description": "software-center-config 仓库维护技能。管理应用配置的版本同步、新增应用、PR 提交流程。",
+  "metadata": {
+    "author": "OpenUBMC Team",
+    "version": "1.0.0",
+    "tags": ["software-center", "config", "openubmc", "manifest"]
+  }
+}

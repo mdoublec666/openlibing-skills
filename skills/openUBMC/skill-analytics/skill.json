@@ -1,0 +1,36 @@
+{
+  "name": "skill-analytics",
+  "version": "1.0.0",
+  "description": "采集当前会话中 OpenUBMC Skills 的使用情况，生成脱敏报告并可选上报，用于 Skills 质量改进。",
+  "author": "OpenUBMC Team",
+  "license": "MulanPSL-2.0",
+  "dependencies": {
+    "bash": ">=4.0"
+  },
+  "files": [
+    "SKILL.md",
+    "skill.json",
+    "skill-report.sh",
+    "commands/skill-report.md"
+  ],
+  "keywords": [
+    "analytics",
+    "telemetry",
+    "feedback",
+    "report",
+    "skills",
+    "openubmc"
+  ],
+  "categories": [
+    "analytics",
+    "tooling"
+  ],
+  "usage": {
+    "prompts": [
+      "上报 skill 使用情况",
+      "skill report",
+      "skill 反馈",
+      "使用报告"
+    ]
+  }
+}

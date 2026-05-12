@@ -1,0 +1,169 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "code-inspection-rules",
+  "title": "Code Inspection Rules Schema",
+  "description": "JSON Schema for validating code inspection rules in YAML format",
+  "type": "object",
+  "required": ["name", "version", "rules"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "规则集名称",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "version": {
+      "type": "string",
+      "description": "规则集版本号，遵循语义化版本规范",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "examples": ["1.0.0", "2.1.3"]
+    },
+    "description": {
+      "type": "string",
+      "description": "规则集的详细描述",
+      "maxLength": 500
+    },
+    "rules": {
+      "type": "array",
+      "description": "规则列表",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "description", "severity", "sceneMatch", "dataFilter", "judgmentCondition", "examples", "messageTemplate"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "规则唯一标识符",
+            "pattern": "^[A-Z]{2,5}-\\d{3}$",
+            "examples": ["SEC-001", "QUAL-002", "EX-001"],
+            "minLength": 6,
+            "maxLength": 20
+          },
+          "name": {
+            "type": "string",
+            "description": "规则名称，简洁明了",
+            "minLength": 1,
+            "maxLength": 50
+          },
+          "description": {
+            "type": "string",
+            "description": "规则的详细描述，说明要检查什么问题",
+            "minLength": 10,
+            "maxLength": 500
+          },
+          "severity": {
+            "type": "string",
+            "description": "问题严重级别",
+            "enum": ["error", "warning", "info"],
+            "default": "warning"
+          },
+          "sceneMatch": {
+            "type": "string",
+            "description": "场景匹配的自然语言描述，说明该规则适用的场景",
+            "minLength": 10,
+            "maxLength": 500,
+            "examples": [
+              "适用于所有项目的源代码文件，但排除测试文件、配置文件和第三方依赖",
+              "适用于 Lua、Python、JavaScript 等语言的业务代码"
+            ]
+          },
+          "dataFilter": {
+            "type": "string",
+            "description": "数据筛选的自然语言描述，说明如何定位可疑代码",
+            "minLength": 10,
+            "maxLength": 500,
+            "examples": [
+              "搜索包含 password、token、secret 等敏感关键词的赋值语句",
+              "搜索包含 print、console.log 等调试打印函数的代码"
+            ]
+          },
+          "judgmentCondition": {
+            "type": "string",
+            "description": "判定条件的自然语言描述，说明如何确认问题",
+            "minLength": 10,
+            "maxLength": 500,
+            "examples": [
+              "如果发现将敏感信息直接赋值给变量，且值是硬编码的字符串，则判定为安全问题",
+              "如果函数体行数超过 50 行，则判定为过长函数"
+            ]
+          },
+          "examples": {
+            "type": "array",
+            "description": "问题案例列表，帮助 AI 更准确地识别问题",
+            "minItems": 1,
+            "maxItems": 10,
+            "items": {
+              "type": "object",
+              "required": ["code", "problem"],
+              "properties": {
+                "code": {
+                  "type": "string",
+                  "description": "问题代码示例",
+                  "minLength": 5,
+                  "maxLength": 500
+                },
+                "problem": {
+                  "type": "string",
+                  "description": "问题描述，说明这段代码存在什么问题",
+                  "minLength": 10,
+                  "maxLength": 300
+                },
+                "language": {
+                  "type": "string",
+                  "description": "代码语言",
+                  "enum": ["lua", "python", "javascript", "java", "go", "c", "cpp", "php", "ruby", "typescript", "general"],
+                  "default": "general"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "exceptions": {
+            "type": "array",
+            "description": "例外场景列表，说明哪些情况不应判定为问题",
+            "minItems": 0,
+            "maxItems": 10,
+            "items": {
+              "type": "object",
+              "required": ["scenario", "reason"],
+              "properties": {
+                "scenario": {
+                  "type": "string",
+                  "description": "例外场景描述",
+                  "minLength": 10,
+                  "maxLength": 300
+                },
+                "reason": {
+                  "type": "string",
+                  "description": "为什么这种情况不应判定为问题",
+                  "minLength": 10,
+                  "maxLength": 300
+                },
+                "example": {
+                  "type": "string",
+                  "description": "例外情况的代码示例（可选）",
+                  "maxLength": 500
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "messageTemplate": {
+            "type": "string",
+            "description": "问题消息模板，支持变量：{file}、{line}、{code}、{description}",
+            "minLength": 10,
+            "maxLength": 200,
+            "pattern": ".*\\{file\\}.*\\{line\\}.*"
+          },
+          "suggestion": {
+            "type": "string",
+            "description": "修复建议",
+            "maxLength": 300
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,63 @@
+{
+  "name": "openubmc-lua-component",
+  "version": "2.1.0",
+  "description": "创建和实现 openUBMC Lua 组件，涵盖脚手架、MDS 建模、代码生成、Lua SDK、UT/IT 测试、构建发布和资源验证的完整开发流程。",
+  "author": "OpenUBMC Team",
+  "license": "MulanPSL-2.0",
+  "openubmc": {
+    "minVersion": "1.0.0",
+    "maxVersion": "2.0.0",
+    "components": ["systemd", "skynet", "mdb", "lua-sdk", "bingo", "mdbctl", "dt", "luaunit"]
+  },
+  "dependencies": {
+    "bingo-cli": ">=1.0.0",
+    "conan": ">=2.0.0",
+    "cmake": ">=3.14",
+    "luaunit": ">=3.4"
+  },
+  "relatedSkills": [
+    "openubmc-dt-testing",
+    "openubmc-qemu-testing",
+    "mdb-interface-dev"
+  ],
+  "files": [
+    "SKILL.md",
+    "skill.json",
+    "evals/evals.json"
+  ],
+  "keywords": [
+    "lua",
+    "microcomponent",
+    "mds",
+    "mdb",
+    "lua-sdk",
+    "bingo",
+    "mdbctl",
+    "conan",
+    "cmake",
+    "bmc",
+    "openubmc",
+    "ut",
+    "it",
+    "testing",
+    "luaunit",
+    "coverage"
+  ],
+  "categories": [
+    "development",
+    "lua",
+    "testing"
+  ],
+  "usage": {
+    "prompts": [
+      "创建Lua组件",
+      "实现MDB接口",
+      "bingo gen代码生成",
+      "Lua SDK对象生命周期",
+      "组件UT和IT测试",
+      "编写单元测试",
+      "编写集成测试",
+      "Conan2和CMake构建发布"
+    ]
+  }
+}

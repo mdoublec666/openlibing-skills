@@ -1,0 +1,106 @@
+{
+  "skill_name": "openubmc-lua-component",
+  "sample_repo": "git@gitcode.com:openUBMC/network_adapter.git",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "我 clone 了 network_adapter 组件（git clone git@gitcode.com:openUBMC/network_adapter.git）。帮我分析一下这个组件的整体结构：mds/model.json 定义了哪些资源对象，src/lualib/network_adapter_app.lua 的入口逻辑是什么，以及 service.json 中声明了哪些依赖。",
+      "expected_output": "对 network_adapter 组件结构的准确分析，包括 MDS 模型、入口文件和依赖关系",
+      "files": [
+        "mds/model.json",
+        "mds/service.json",
+        "src/lualib/network_adapter_app.lua"
+      ],
+      "expectations": [
+        "识别出 model.json 中定义了 NetworkAdapters、NetworkAdapter、NetworkPort 等资源对象",
+        "识别出 network_adapter_app.lua 继承自 network_adapter.service（bingo gen 生成的基类）",
+        "识别出 service.json 中 build 和 test 依赖是分开声明的",
+        "识别出 test 依赖包含 hwdiscovery、persistence、maca、ipmi_core 等组件",
+        "没有把 gen/ 目录下的生成代码当成手写代码",
+        "正确理解了 openUBMC 组件的标准目录结构"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "我的组件 led_manager 执行 bingo gen 的时候报错了：FileNotFoundError: .../path/mdb/bmc/kepler/Systems/LedIndicator.json。我的 model.json 里引用了 bmc.kepler.Systems.ILedIndicator 接口。帮我排查一下问题出在哪里，怎么修复。",
+      "expected_output": "正确识别 path 文件缺少子目录结构，给出修复方案，提到需要在 mdb_interface 中修复并重新构建",
+      "files": [],
+      "expectations": [
+        "正确识别出问题是 mdb_interface 中 path 文件缺少类名/类名.json 子目录结构",
+        "展示了正确路径和错误路径的对比",
+        "建议在 mdb_interface 仓库中修复 path 文件位置",
+        "修复后提到需要重新 bingo build mdb_interface 再 bingo gen",
+        "没有建议直接修改 Conan 缓存或 temp 目录中的文件"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "参考 network_adapter 组件的 mds/model.json，我想给自己的组件新增一个 OpticalModule 资源对象，接口 bmc.kepler.Systems.NetworkAdapter.OpticalModule 已经在 mdb_interface 中定义好了。帮我写 model.json 中的配置，要求 Temperature 属性需要持久化。",
+      "expected_output": "正确的 model.json 配置，接口属性用空对象，持久化属性配置 usage/tableName/primaryKey",
+      "files": [
+        "mds/model.json"
+      ],
+      "expectations": [
+        "interfaces.properties 中的属性使用空对象 {}，没有重复定义 baseType",
+        "Temperature 属性配置了 usage 持久化字段",
+        "同时配置了 tableName 和 primaryKey",
+        "非持久化属性没有配置 usage",
+        "path 格式符合 openUBMC 规范（使用 ${} 变量）",
+        "参考或提到了 mdb-interface-dev skill 的持久化规则"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "network_adapter 组件已有完整的 UT 结构。我在 src/lualib/upgrade/ 下新增了一个 upgrade_verify.lua 模块，导出了 verify_firmware_version(version_str) 函数。请帮我为这个模块编写 UT，参考现有的 test/unit/test_upgrade/ 目录结构。",
+      "expected_output": "在 test/unit/test_upgrade/ 下新增测试文件，复用现有 init.lua 加载链",
+      "files": [
+        "test/unit/test_upgrade/test_parser_cfg.lua",
+        "test/unit/test.lua"
+      ],
+      "expectations": [
+        "在 test/unit/test_upgrade/ 下创建了 test_upgrade_verify.lua",
+        "使用了 require 'upgrade.upgrade_verify' 导入被测模块",
+        "测试 table 以 Test 开头，测试函数以 test_ 开头",
+        "使用了 LuaUnit 断言（assertEquals、assertNotNil 等）",
+        "覆盖了正常版本号和异常版本号（空字符串、nil）场景",
+        "确认了通过 test_upgrade/init.lua 或 test.lua 的 require 链加载",
+        "使用 bingo test -ut 运行"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "我想给 network_adapter 新增一个 IT 场景，验证通过 D-Bus 查询 NetworkPort 对象的 LinkStatus 属性。请参考现有的 test/integration/test_network_adapter.lua 结构，帮我把测试加进去。",
+      "expected_output": "在现有 IT 入口中新增测试函数，使用 mdb API 查询并断言",
+      "files": [
+        "test/integration/test_network_adapter.lua",
+        "test/integration/test_network_adapter.conf",
+        "mds/service.json"
+      ],
+      "expectations": [
+        "在 test_network_adapter.lua 的 main 函数中新增测试调用",
+        "使用了 mdb.get_sub_objects 或 mdb.get_object 查询 NetworkPort 对象",
+        "使用了 lu.assertEquals 或 lu.assertNotNil 验证 LinkStatus",
+        "没有创建新的 .conf 文件（复用现有配置）",
+        "理解了 skynet.start → dbus_launch → uniqueservice → main 的调用链",
+        "理解了 test_on_mdb_remove_object 必须放在最后（会删除网卡对象）",
+        "使用 bingo test -it 运行"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "参考 network_adapter 的完整开发和测试结构，帮我从零创建一个 fan_control 组件。接口 bmc.kepler.Thermal.IFan 已存在，有 Id、Speed、Status 三个属性。要求完成从脚手架到 UT/IT 测试的完整流程。",
+      "expected_output": "完整的端到端开发流程：脚手架 → model.json → bingo gen → 业务逻辑 → 构建 → UT → IT → 验证",
+      "files": [],
+      "expectations": [
+        "使用了 bingo new -n fan_control -t application -l lua -conan 2.0",
+        "model.json 中 interfaces.properties 使用空对象 {}",
+        "执行了 bingo gen 和 bingo build --stage=stable",
+        "UT 结构参考了 network_adapter：test/unit/test.lua 入口 + test_xxx.lua 用例",
+        "IT 结构参考了 network_adapter：.conf 包含 include/set_start/include_app/done + .lua 包含 dbus_launch/uniqueservice",
+        "service.json 中声明了 test 依赖",
+        "开发流程中测试步骤在构建之后、最终验证之前",
+        "没有使用 require logger、meson.build、src/main.lua 等被禁止的模式"
+      ]
+    }
+  ]
+}

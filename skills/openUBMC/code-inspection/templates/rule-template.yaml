@@ -1,0 +1,21 @@
+name: custom-rules
+version: 1.0.0
+description: 规则集描述
+
+rules:
+  - id: RULE-001
+    name: 规则名称
+    description: 规则详细描述
+    severity: error
+    sceneMatch: 适用场景的自然语言描述
+    dataFilter: 如何筛选可疑代码的自然语言描述
+    judgmentCondition: 如何判定问题的自然语言描述
+    examples:
+      - code: "问题代码示例"
+        problem: 问题描述
+        language: general
+    exceptions:
+      - scenario: 例外场景描述
+        reason: 例外原因
+    messageTemplate: "在 {file}:{line} 发现问题：{code}"
+    suggestion: 修复建议

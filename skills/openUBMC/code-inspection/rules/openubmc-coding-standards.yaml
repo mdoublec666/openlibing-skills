@@ -1,0 +1,1296 @@
+name: openubmc-coding-standards
+version: 1.0.0
+description: openUBMC社区编程规范规则集，包含代码风格、编程实践、安全编码、异常处理和SR配置等规范
+
+rules:
+  # ========== 代码风格 - 命名 ==========
+  - id: NAM-001
+    name: 标识符命名规范检查
+    description: 检查标识符命名是否符合openUBMC命名规范，包括snake_case、大驼峰、全大写等风格要求
+    severity: warning
+    sceneMatch: 适用于所有Lua源代码文件，排除测试文件和第三方依赖
+    dataFilter: 搜索变量名、函数名、类名、常量名等标识符定义，重点关注不符合命名风格的代码
+    judgmentCondition: 如果发现标识符命名不符合openUBMC命名规范（如类名未使用snake_case、RPC方法未使用大驼峰、常量未全大写等），则判定为问题
+    examples:
+      - code: "local className = {}"
+        problem: 类名应使用snake_case风格，应为class_name
+        language: lua
+      - code: "function module_name:set_name(exampleName)"
+        problem: RPC方法参数应使用大驼峰风格，应为ExampleName
+        language: lua
+      - code: "local default_port = 8080"
+        problem: 常量应全大写下划线分割，应为DEFAULT_PORT
+        language: lua
+    exceptions:
+      - scenario: 第三方库的API接口
+        reason: 第三方库的命名规范不由我们控制，需要保持原样
+    messageTemplate: "在 {file}:{line} 发现标识符命名不符合规范：{code}"
+    suggestion: "参考openUBMC命名规范表，使用正确的命名风格：仓库名/组件名/文件/模块/类/函数/变量使用snake_case，RPC方法和参数使用大驼峰，常量和枚举值全大写"
+
+  - id: NAM-002
+    name: 标识符拼写检查
+    description: 检查标识符拼写是否正确，是否符合通用习惯缩写
+    severity: warning
+    sceneMatch: 适用于所有Lua源代码文件
+    dataFilter: 搜索所有标识符定义，检查是否有拼写错误或非标准缩写
+    judgmentCondition: 如果发现标识符拼写明显错误或使用了不规范的缩写（如用非标准缩写代替完整单词），则判定为问题
+    examples:
+      - code: "local mangment = {}"
+        problem: 拼写错误，应为management
+        language: lua
+      - code: "local configuraton = {}"
+        problem: 拼写错误，应为configuration
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现标识符拼写可能错误：{code}"
+    suggestion: "检查标识符拼写是否正确，使用规范的英文单词或标准缩写（参考规范中的常用英文缩写对照表）"
+
+  # ========== 代码风格 - 注释 ==========
+  - id: CMT-001
+    name: 晦涩代码注释检查
+    description: 检查较为晦涩的代码、特殊处理场景代码是否有详尽注释
+    severity: warning
+    sceneMatch: 适用于所有Lua源代码文件
+    dataFilter: 搜索复杂的逻辑代码、特殊处理代码、协议字段处理、自定义配置文件格式处理等
+    judgmentCondition: 如果发现代码逻辑复杂但缺少注释说明，或者有特殊处理但未说明背景、业务场景、处理逻辑等，则判定为问题
+    examples:
+      - code: |
+          -- 无注释的复杂位运算
+          local value = data & 0xFF
+          local result = (value >> 4) | ((value & 0x0F) << 4)
+        problem: 复杂的位运算操作缺少注释说明其用途和计算逻辑
+        language: lua
+      - code: |
+          -- 无注释的特殊处理
+          if vendor == 'xxx' then
+              -- 某些特殊操作
+          end
+        problem: 针对特定供应商的特殊处理缺少背景说明和规避原因注释
+        language: lua
+    exceptions:
+      - scenario: 简单直观的代码
+        reason: 对于显而易见的代码不需要额外注释
+    messageTemplate: "在 {file}:{line} 发现复杂代码缺少必要注释：{code}"
+    suggestion: "为晦涩难懂的代码添加注释，说明相关知识、协议字段格式、特殊处理背景和原因等"
+
+  # ========== 编程实践 - 表操作 ==========
+  - id: TBL-001
+    name: 弱引用表与gc元方法混用检查
+    description: 检查是否禁止弱引用表与__gc元方法混用
+    severity: error
+    sceneMatch: 适用于所有Lua源代码文件
+    dataFilter: 搜索setmetatable函数调用，检查是否同时设置了__mode和__gc
+    judgmentCondition: 如果发现同一表同时设置了__mode（弱引用）和__gc元方法，则判定为严重问题
+    examples:
+      - code: "local table_a = setmetatable({}, {__mode = 'kv', __gc = function() end})"
+        problem: 弱引用表与__gc元方法混用，在LuaJIT中可能引发无法预期的错误
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现弱引用表与__gc元方法混用：{code}"
+    suggestion: "移除__gc元方法或__mode设置，不要在同一表中混用"
+
+  - id: TBL-002
+    name: 表直接比较检查
+    description: 检查是否使用了Lua表的直接比较操作
+    severity: error
+    sceneMatch: 适用于所有Lua源代码文件
+    dataFilter: 搜索使用==或~=进行表比较的代码
+    judgmentCondition: 如果发现直接使用==或~=(比较两个table变量或table与空表{}），则判定为问题
+    examples:
+      - code: "if table_a == {} then"
+        problem: Lua表不支持直接比较，应使用utils.table_compare或next(table) == nil
+        language: lua
+      - code: "if table_a == table_b then"
+        problem: Lua表不支持直接比较，应使用utils.table_compare
+        language: lua
+    exceptions:
+      - scenario: 表与nil的比较
+        reason: 表与nil的比较是检查表是否存在，这是有效的
+    messageTemplate: "在 {file}:{line} 发现表直接比较：{code}"
+    suggestion: "使用utils.table_compare函数进行比较，或使用next(table) == nil检查空表"
+
+  - id: TBL-003
+    name: pairs/ipairs误用检查
+    description: 检查是否正确使用pairs和ipairs遍历表
+    severity: warning
+    sceneMatch: 适用于所有Lua源代码文件
+    dataFilter: 搜索for循环中使用pairs或ipairs遍历表的代码
+    judgmentCondition: 如果发现对连续数组使用pairs遍历（需要有序），或对不连续数组/字典使用ipairs遍历，则判定为问题
+    examples:
+      - code: |
+          local a = {1, 2, 3, 4, 5}
+          for k, v in pairs(a) do
+              print(v)
+          end
+        problem: 对连续数组使用pairs遍历，不保证顺序，应使用ipairs
+        language: lua
+      - code: |
+          local b = {[1] = '1', ['a'] = 'a'}
+          for k, v in ipairs(b) do
+              print(v)
+          end
+        problem: 对包含非连续索引的表使用ipairs，无法完整遍历所有元素
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现pairs/ipairs误用：{code}"
+    suggestion: "有序遍历数组使用ipairs，完整遍历不连续数组或字典使用pairs"
+
+  - id: TBL-004
+    name: 取长度操作#使用检查
+    description: 检查使用#取长度时是否确保表是序列且未包含其他类型键值
+    severity: error
+    sceneMatch: 适用于所有Lua源代码文件
+    dataFilter: 搜索使用#运算符对table类型取长度的代码
+    judgmentCondition: 如果发现对非序列表（正数键集不连续或从1开始）或包含其他类型键值的表使用#取长度，则判定为问题
+    examples:
+      - code: |
+          local a = {[2] = 1, [3] = 2}
+          print(#a)
+        problem: 表不是序列（缺少键值1），使用#取长度结果不可预测
+        language: lua
+      - code: |
+          local c = {[1] = 1, [2] = 2, ['s'] = 3}
+          print(#c)
+        problem: 表包含其他类型键值，使用#取长度容易产生误解
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现对非序列表使用#取长度：{code}"
+    suggestion: "确保表是序列（正数键集从1开始连续）且未包含其他类型键值时再使用#"
+
+  - id: TBL-005
+    name: table.remove使用检查
+    description: 检查使用table.remove时是否确保表是序列
+    severity: error
+    sceneMatch: 适用于所有Lua源代码文件
+    dataFilter: 搜索table.remove函数调用
+    judgmentCondition: 如果发现对非序列表使用table.remove，则判定为问题
+    examples:
+      - code: |
+          local a = {[2] = 1, [3] = 2}
+          table.remove(a, 2)
+        problem: 表不是序列，使用table.remove会报错
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现对非序列表使用table.remove：{code}"
+    suggestion: "确保表是序列后再使用table.remove，否则使用table[i] = nil方式删除"
+
+  - id: TBL-006
+    name: 遍历中修改表检查
+    description: 检查在pairs遍历表时是否同时对表做插入和删除操作
+    severity: error
+    sceneMatch: 适用于所有Lua源代码文件
+    dataFilter: 搜索for循环中使用pairs遍历，循环体内有表插入或删除操作的代码
+    judgmentCondition: 如果发现在pairs遍历循环中对正在遍历的表进行插入或删除操作，则判定为问题
+    examples:
+      - code: |
+          local a = {1, 2, 3}
+          for k, v in pairs(a) do
+              a[k] = nil
+              a[k + 3] = v
+          end
+        problem: 在pairs遍历中对表同时进行插入和删除，会导致报错
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现遍历中修改表：{code}"
+    suggestion: "避免在遍历循环中修改正在遍历的表，可先收集需要操作的索引，遍历完成后再操作"
+
+  - id: TBL-007
+    name: 弱引用表使用检查
+    description: 检查使用Lua弱引用表时是否确保表外有对变量进行引用，或变量垃圾回收不影响业务功能
+    severity: error
+    sceneMatch: 适用于所有Lua源代码文件
+    dataFilter: 搜索setmetatable设置__mode的代码，检查弱引用表的使用场景
+    judgmentCondition: 如果发现弱引用表用于存放需要持久化的对象，且表外没有其他引用，则判定为问题
+    examples:
+      - code: |
+          local db_objs = setmetatable({}, {__mode = 'kv'})
+          function add_db_obj(obj)
+              db_objs[obj] = context.get_context() or context.new()
+          end
+        problem: 弱引用表用于存放持久化对象，离开作用域后可能被垃圾回收导致数据丢失
+        language: lua
+    exceptions:
+      - scenario: 缓存池场景
+        reason: 缓存池场景下对象被垃圾回收后可以重新创建，不影响业务功能
+    messageTemplate: "在 {file}:{line} 发现弱引用表使用不当：{code}"
+    suggestion: "确保弱引用表用于缓存等可容忍垃圾回收的场景，持久化对象应使用普通表"
+
+  - id: TBL-008
+    name: 插件参数传递检查
+    description: 检查应用插件机制时是否使用深拷贝传递table类型参数
+    severity: warning
+    sceneMatch: 适用于涉及插件机制的Lua代码
+    dataFilter: 搜索调用插件函数时传递table类型参数的代码
+    judgmentCondition: 如果发现直接传递table参数到插件，且该参数后续在组件内需要继续使用，则判定为问题
+    examples:
+      - code: |
+          function plugin_method.set_property(parameter)
+              local ok, rsp = pcall(func, parameter)
+          end
+        problem: table参数直接传入插件，可能被插件内部修改
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现table参数未深拷贝传入插件：{code}"
+    suggestion: "使用utils.table_copy深拷贝一份table参数传入插件"
+
+  - id: TBL-009
+    name: 高频赋空表检查
+    description: 检查高频调用场景中是否禁止通过赋空表的方式实现表的清空
+    severity: error
+    sceneMatch: 适用于所有Lua源代码文件，特别关注高频调用的循环或函数
+    dataFilter: 搜索在循环或高频函数中给table变量赋空表{}的代码
+    judgmentCondition: 如果发现在高频调用的循环或函数中通过赋空表{}清空表，则判定为问题
+    examples:
+      - code: |
+          for i = 1, 10000 do
+              local config = {}
+              -- 使用config
+          end
+        problem: 高频调用中赋空表会导致内存持续增长
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现高频调用中赋空表：{code}"
+    suggestion: "使用依次赋nil的方式或mc.table_cache类来清空表"
+
+  # ========== 编程实践 - 函数 ==========
+  - id: FUN-001
+    name: 信号处理函数重量检查
+    description: 检查信号处理函数是否轻量，禁止添加延时函数
+    severity: error
+    sceneMatch: 适用于所有Lua源代码文件，特别关注信号处理相关代码
+    dataFilter: 搜索信号处理函数，检查函数体内是否有skynet.sleep等延时操作
+    judgmentCondition: 如果发现信号处理函数处理时间过长或包含skynet.sleep等延时函数，则判定为问题
+    examples:
+      - code: |
+          function on_signal()
+              skynet.sleep(100)
+              -- 其他操作
+          end
+        problem: 信号处理函数中添加了延时函数skynet.sleep
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现信号处理函数非轻量：{code}"
+    suggestion: "信号处理函数应保持轻量，避免添加延时函数"
+
+  - id: FUN-002
+    name: 循环体中local变量检查
+    description: 检查循环体中是否定义了local变量，建议放在循环体外定义
+    severity: warning
+    sceneMatch: 适用于所有Lua源代码文件
+    dataFilter: 搜索for循环体内定义的local变量
+    judgmentCondition: 如果发现在循环体中定义local变量且该变量可以在循环体外定义，则判定为问题
+    examples:
+      - code: |
+          for i = 1, #array do
+              local a
+              a = array[i].number
+          end
+        problem: 循环体中定义local变量，应放在循环体外
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现循环体中定义local变量：{code}"
+    suggestion: "将local变量定义移到循环体外，减少内存申请"
+
+  - id: FUN-003
+    name: 下划线函数参数检查
+    description: 检查是否禁止将_作为函数入参
+    severity: error
+    sceneMatch: 适用于所有Lua源代码文件
+    dataFilter: 搜索函数定义中使用_作为参数名的代码
+    judgmentCondition: 如果发现函数参数使用_作为占位符，则判定为问题
+    examples:
+      - code: "local res, _ = func(cmd, _, request.data_out)"
+        problem: 使用_作为函数入参，_可能已作为全局变量被赋值
+        language: lua
+    exceptions:
+      - scenario: 函数返回值的占位
+        reason: _作为函数返回值的占位符是Lua的常见用法
+    messageTemplate: "在 {file}:{line} 发现使用_作为函数入参：{code}"
+    suggestion: "直接通过nil占位，不要使用_作为函数入参"
+
+  # ========== 编程实践 - 程序块 ==========
+  - id: CHK-001
+    name: 取长度前类型检查
+    description: 检查对变量使用#取长度前是否确保变量为string/table类型或有__len()元方法
+    severity: error
+    sceneMatch: 适用于所有Lua源代码文件
+    dataFilter: 搜索使用#运算符的代码，检查操作数是否先进行类型检查
+    judgmentCondition: 如果发现对可能非string/table类型的变量直接使用#取长度且未进行类型检查，则判定为问题
+    examples:
+      - code: "if #v.SRVersion > 0 then"
+        problem: 未确保v.SRVersion为string或table类型就使用#
+        language: lua
+      - code: "if type(v.SRVersion) == 'string' and #v.SRVersion > 0 then"
+        problem: 正确示例，先检查类型再取长度
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现未检查类型就使用#：{code}"
+    suggestion: "使用#前先用type函数检查变量是否为string或table类型"
+
+  - id: CHK-002
+    name: string.find plain参数检查
+    description: 检查使用string.find时是否正确使用plain参数
+    severity: warning
+    sceneMatch: 适用于所有Lua源代码文件
+    dataFilter: 搜索string.find函数调用
+    judgmentCondition: 如果发现string.find的第4个参数为true但缺少第3个参数，或本应使用plain参数但未使用，则判定为问题
+    examples:
+      - code: "string.find(uri, '.ISO', true)"
+        problem: 传入第4个参数但缺少第3个参数，plain参数不会生效
+        language: lua
+      - code: "string.find(uri, '.ISO', 1, true)"
+        problem: 正确示例，同时传入第3和第4个参数
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现string.find plain参数使用不当：{code}"
+    suggestion: "如果需要传入第4个参数plain=true，必须同时传入第3个参数（起始位置）"
+
+  - id: CHK-003
+    name: 三目运算B为false检查
+    description: 检查使用A and B or C进行三目运算时B是否可能为false
+    severity: error
+    sceneMatch: 适用于所有Lua源代码文件
+    dataFilter: 搜索使用and...or...三目运算符的代码
+    judgmentCondition: 如果发现三目运算中B的取值可能为false或nil，则判定为问题
+    examples:
+      - code: "local res = (val_a == 1) and false or true"
+        problem: B取值为false时，无论A真假结果都为C，不符合预期
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现三目运算B可能为false：{code}"
+    suggestion: "当B可能为false时，使用if...else表达式代替三目运算"
+
+  - id: CHK-004
+    name: goto语句使用检查
+    description: 检查是否使用了Lua的goto语句
+    severity: warning
+    sceneMatch: 适用于所有Lua源代码文件
+    dataFilter: 搜索goto语句和标签定义
+    judgmentCondition: 如果发现使用了goto语句，则判定为问题
+    examples:
+      - code: |
+          goto skip
+          ::skip::
+        problem: 不推荐使用goto语句
+        language: lua
+    exceptions:
+      - scenario: 错误处理跳转
+        reason: 在复杂的错误处理场景中，goto可能用于统一清理资源
+    messageTemplate: "在 {file}:{line} 发现使用goto语句：{code}"
+    suggestion: "避免使用goto语句，使用更清晰的控制流结构"
+
+  # ========== 编程实践 - 多线程 ==========
+  - id: MTH-001
+    name: coroutine使用检查
+    description: 检查在skynet框架中是否禁止使用coroutine创建协程
+    severity: error
+    sceneMatch: 适用于所有Lua源代码文件
+    dataFilter: 搜索coroutine.create、coroutine.resume、coroutine.yield等直接调用
+    judgmentCondition: 如果发现直接使用Lua的coroutine创建协程（非skynet.fork），则判定为严重问题
+    examples:
+      - code: "coroutine.create(function() end)"
+        problem: 在skynet框架中应使用skynet.fork创建协程，禁止直接使用coroutine
+        language: lua
+    exceptions:
+      - scenario: 框架内部代码
+        reason: skynet框架内部可能需要使用coroutine
+    messageTemplate: "在 {file}:{line} 发现直接使用coroutine：{code}"
+    suggestion: "使用skynet.fork替代coroutine创建协程"
+
+  - id: MTH-002
+    name: ORM中skynet协程检查
+    description: 检查是否禁止在ORM对象中通过skynet创建协程
+    severity: error
+    sceneMatch: 适用于ORM相关Lua代码
+    dataFilter: 搜索ORM对象（c_开头的类）中使用skynet.fork的代码
+    judgmentCondition: 如果发现在ORM对象方法中使用skynet.fork创建协程，则判定为问题
+    examples:
+      - code: |
+          function c_network_adapter:set_npu_max_sfp_temp()
+              skynet.fork(function()
+                  while true do
+                      self:update_npu_max_sfp_temp(ops)
+                  end
+              end)
+          end
+        problem: 在ORM对象中通过skynet.fork创建协程，对象卸载后协程不会消亡
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现ORM中使用skynet创建协程：{code}"
+    suggestion: "使用self:next_tick替代skynet.fork在ORM中创建协程"
+
+  - id: MTH-003
+    name: 协程挂起唤醒混用检查
+    description: 检查使用skynet.wait/skynet.wakeup时是否中途有其他挂起协程操作
+    severity: error
+    sceneMatch: 适用于所有Lua源代码文件
+    dataFilter: 搜索同时使用skynet.wait/skynet.wakeup和skynet.sleep的代码
+    judgmentCondition: 如果发现skynet.wait/wakeup操作之间插入skynet.sleep等其他挂起操作，则判定为问题
+    examples:
+      - code: |
+          function func()
+              local co = coroutine.running()
+              skynet.fork(function()
+                  skynet.wakeup(co)
+              end)
+              skynet.sleep(10)
+              skynet.wait()
+          end
+        problem: skynet.sleep会影响skynet.wait/wakeup的预期行为
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现协程挂起唤醒混用：{code}"
+    suggestion: "将skynet.sleep等挂起操作放在独立的协程中，避免影响原协程的挂起唤醒"
+
+  # ========== 编程实践 - 数据库 ==========
+  - id: DBS-001
+    name: 数据库批量插入事务检查
+    description: 检查数据库批量插入时是否使用事务机制进行批量提交
+    severity: warning
+    sceneMatch: 适用于涉及数据库操作的Lua代码
+    dataFilter: 搜索循环中进行数据库插入/删除操作的代码
+    judgmentCondition: 如果发现批量（5条及以上）数据库操作未使用事务（db:tx），则判定为问题
+    examples:
+      - code: |
+          for _, v in pairs(power_table) do
+              local power_row_data = local_db['Power'](saved_data)
+              power_row_data:save()
+          end
+        problem: 批量数据库操作未使用事务，应使用db:tx包装
+        language: lua
+      - code: |
+          local ok, err = pcall(local_db.db.tx, local_db.db, function()
+              for _, v in pairs(power_table) do
+                  local_db.Power(v):save()
+              end
+          end)
+        problem: 正确示例，使用事务进行批量提交
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现批量数据库操作未使用事务：{code}"
+    suggestion: "批量数据库操作应使用db:tx包装，使用pcall调用以处理错误"
+
+  - id: DBS-002
+    name: 枚举主键检查
+    description: 检查是否避免使用枚举类型的属性作为持久化数据库表的主键
+    severity: error
+    sceneMatch: 适用于MDS model.json配置文件
+    dataFilter: 搜索model.json中primaryKey为true且baseType为Enum的属性定义
+    judgmentCondition: 如果发现枚举类型的属性被设置为主键，则判定为问题
+    examples:
+      - code: |
+          "properties": {
+              "Id": {
+                  "baseType": "Enum",
+                  "$ref": "types.json#/defs/EnumType",
+                  "primaryKey": true
+              }
+          }
+        problem: 使用枚举类型作为主键，版本回退时可能因找不到新增枚举值而失败
+        language: json
+    messageTemplate: "在 {file}:{line} 发现枚举类型作为主键：{code}"
+    suggestion: "根据实际数据类型定义主键（如U8、U32等），避免使用枚举类型"
+
+  # ========== 编程实践 - 其他 ==========
+  - id: OTH-001
+    name: 对象名处理业务流程检查
+    description: 检查是否禁止使用对象名处理业务流程
+    severity: error
+    sceneMatch: 适用于所有Lua源代码文件
+    dataFilter: 搜索对对象名进行解析、比对、截取等操作的代码
+    judgmentCondition: 如果发现使用对象名进行业务流程处理（如对象名比对、对象名分段解析），则判定为问题
+    examples:
+      - code: "object.Slot = tonumber(string.sub(position, -2))"
+        problem: 通过截取position后两位作为slot，对象名变化会导致功能问题
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现使用对象名处理业务流程：{code}"
+    suggestion: "使用SR配置属性而非对象名进行业务流程处理"
+
+  - id: OTH-002
+    name: 日志格式化符类型检查
+    description: 检查mc.logging库中格式化日志输出函数的格式化符与参数类型是否匹配
+    severity: error
+    sceneMatch: 适用于所有Lua源代码文件
+    dataFilter: 搜索mc.logging的log:info、log:error等函数，检查%d和%u格式化符的参数
+    judgmentCondition: 如果发现使用%d或%u格式化符但输出值为非整型（如浮点数），则判定为问题
+    examples:
+      - code: |
+          local c = 5 / 2
+          log:info('c = %d', c)
+        problem: c为浮点数2.5，使用%d会抛异常
+        language: lua
+      - code: |
+          local d = 5 // 2
+          log:info('d = %d', d)
+        problem: 正确示例，d为整型2
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现日志格式化符类型不匹配：{code}"
+    suggestion: "确保%d和%u格式化符的输出值为整型，或使用%s格式化符避免类型问题"
+
+  - id: OTH-003
+    name: 系统时间计算间隔检查
+    description: 检查是否禁止使用系统时间来计算时间间隔
+    severity: error
+    sceneMatch: 适用于所有Lua源代码文件
+    dataFilter: 搜索使用vos_get_cur_time_stamp、os.time、utils.time_ms等系统时间函数计算时间差的代码
+    judgmentCondition: 如果发现使用系统时间计算时间间隔（而非记录时刻），则判定为问题
+    examples:
+      - code: |
+          local start = vos.vos_get_cur_time_stamp()
+          -- do something
+          local elapsed = vos.vos_get_cur_time_stamp() - start
+        problem: 使用系统时间计算时间间隔，NTP同步会导致时间跳变影响结果
+        language: lua
+      - code: |
+          local start = vos.vos_tick_get()
+          -- do something
+          local elapsed = vos.vos_tick_get() - start
+        problem: 正确示例，使用运行时间计算间隔
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现使用系统时间计算间隔：{code}"
+    suggestion: "使用vos.vos_tick_get()或skynet.now()等运行时间函数计算时间间隔"
+
+  - id: OTH-004
+    name: 八进制数表示检查
+    description: 检查是否禁止使用0XXX表示8进制数
+    severity: error
+    sceneMatch: 适用于所有Lua源代码文件
+    dataFilter: 搜索以0开头的数字字面量
+    judgmentCondition: 如果发现使用0XXX格式表示8进制数（如0640），则判定为问题
+    examples:
+      - code: "utils.chmod(file_path, 0640)"
+        problem: Lua不支持0XXX表示8进制数
+        language: lua
+      - code: "utils.chmod(file_path, utils.S_IRUSR | utils.S_IWUSR | utils.S_IRGRP)"
+        problem: 正确示例，使用位或组合权限标志
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现使用0XXX表示八进制：{code}"
+    suggestion: "使用位或运算组合权限标志，或使用十进制数"
+
+  - id: OTH-005
+    name: 热插拔对象单例模式检查
+    description: 检查是否禁止对有热插拔场景的csr对象使用单例模式
+    severity: error
+    sceneMatch: 适用于CSR相关Lua代码
+    dataFilter: 搜索c_开头的ORM类中使用单例模式的代码
+    judgmentCondition: 如果发现对有热插拔场景的csr对象使用单例模式，则判定为问题
+    examples:
+      - code: |
+          local c_device = class()
+          function c_device.instance()
+              -- 单例实现
+          end
+        problem: 有热插拔场景的对象使用单例，重新分发时会使用脏数据
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现热插拔对象使用单例模式：{code}"
+    suggestion: "不要对有热插拔场景的对象使用单例模式"
+
+  - id: OTH-006
+    name: 全局skynet队列检查
+    description: 检查使用skynet.queue队列时是否避免使用全局队列
+    severity: warning
+    sceneMatch: 适用于所有Lua源代码文件
+    dataFilter: 搜索skynet.queue的使用，检查是否声明为全局变量
+    judgmentCondition: 如果发现使用全局的skynet.queue队列（多个对象/函数共用），则判定为问题
+    examples:
+      - code: |
+          local queue = require 'skynet.queue'
+          local cs = queue() -- 全局队列
+          local s = class()
+          function s:fun1()
+              cs(funa, ...)
+          end
+          function s:fun2()
+              cs(funb, ...)
+          end
+        problem: 使用全局队列，不同函数的执行会互相影响
+        language: lua
+      - code: |
+          local queue = require 'skynet.queue'
+          local s = class()
+          function s:ctor()
+              self.cs_a = queue()
+              self.cs_b = queue()
+          end
+        problem: 正确示例，每个对象和函数使用独立的队列
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现使用全局队列：{code}"
+    suggestion: "将队列声明为对象成员变量，不同对象和函数使用独立的队列"
+
+  - id: OTH-007
+    name: sed命令硬编码行号检查
+    description: 检查使用sed命令是否禁止带有硬编码行号
+    severity: error
+    sceneMatch: 适用于所有Lua源代码文件
+    dataFilter: 搜索sed命令执行，检查是否包含硬编码行号
+    judgmentCondition: 如果发现sed命令使用硬编码行号（如sed -i '12 i\ xxx'），则判定为问题
+    examples:
+      - code: "self.run(\"sed -i '12 i\\ chown root:root /dev/shm/dbus/.dbus' rundbus.sh\")"
+        problem: 使用硬编码行号，文件变化会导致修改内容错位
+        language: lua
+      - code: "self.run(\"sed -i '$ i\\chown root:root /dev/shm/dbus/.dbus' rundbus.sh\")"
+        problem: 正确示例，基于行尾查找
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现sed命令使用硬编码行号：{code}"
+    suggestion: "使用文件尾查找或模式匹配替代硬编码行号"
+
+  - id: OTH-008
+    name: skynet.send结果获取检查
+    description: 检查跨skynet服务调用若需要获取执行结果应使用skynet.call而非skynet.send
+    severity: error
+    sceneMatch: 适用于所有Lua源代码文件
+    dataFilter: 搜索使用skynet.send并检查返回值的代码
+    judgmentCondition: 如果发现使用skynet.send发送消息并检查返回结果，则判定为问题
+    examples:
+      - code: |
+          local ok, ret = pcall(function()
+              return skynet.send('main', 'lua', 'exec_function', parameter)
+          end)
+        problem: skynet.send为异步调用，无法获取执行结果，应使用skynet.call
+        language: lua
+      - code: |
+          local ok, ret = pcall(function()
+              return skynet.call('main', 'lua', 'exec_function', parameter)
+          end)
+        problem: 正确示例，使用skynet.call同步获取执行结果
+        language: lua
+    exceptions:
+      - scenario: 不需要返回值的异步通知
+        reason: 如果只是发送通知不需要返回结果，使用skynet.send是合理的
+    messageTemplate: "在 {file}:{line} 发现使用skynet.send获取结果：{code}"
+    suggestion: "需要获取执行结果时使用skynet.call而非skynet.send"
+
+  # ========== 安全编码 - 注入缺陷 ==========
+  - id: SEC-001
+    name: os.execute/io.popen使用检查
+    description: 检查是否禁止使用os.execute、io.popen函数
+    severity: error
+    sceneMatch: 适用于所有Lua源代码文件
+    dataFilter: 搜索os.execute和io.popen函数调用
+    judgmentCondition: 如果发现使用os.execute或io.popen函数，则判定为严重安全问题
+    examples:
+      - code: "os.execute('cp /tmp/config.json /dev/shm/config.json')"
+        problem: 使用os.execute可能导致进程卡死
+        language: lua
+      - code: "vos.system_s('/bin/cp', '/tmp/config.json', '/dev/shm/config.json')"
+        problem: 正确示例，使用vos.system_s执行shell命令
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现使用os.execute或io.popen：{code}"
+    suggestion: "使用vos.system_s函数替代os.execute和io.popen"
+
+  - id: SEC-002
+    name: shell命令注入检查
+    description: 检查以/bin/sh或/bin/bash作为命令解释器时是否对vos.system_s函数进行命令注入参数检查
+    severity: error
+    sceneMatch: 适用于所有Lua源代码文件
+    dataFilter: 搜索vos.system_s调用，第一个参数为/bin/sh或/bin/bash的情况
+    judgmentCondition: 如果发现vos.system_s使用/bin/sh或/bin/bash作为解释器且参数可能包含外部输入但未进行check_shell_special_character_s检查，则判定为问题
+    examples:
+      - code: "vos.system_s('/bin/sh', '-c', 'cp', src_dir, '/tmp/test')"
+        problem: 使用/bin/sh作为解释器但未对src_dir进行命令注入检查
+        language: lua
+      - code: |
+          if utils_file.check_shell_special_character_s(src_dir) ~= 0 then
+              return
+          end
+          vos.system_s('/bin/sh', '-c', 'cp', src_dir, '/tmp/test')
+        problem: 正确示例，先进行命令注入检查
+        language: lua
+    exceptions:
+      - scenario: 参数全部硬编码
+        reason: 如果参数都是硬编码不包含外部输入，可以不检查
+    messageTemplate: "在 {file}:{line} 发现shell命令可能存在注入风险：{code}"
+    suggestion: "使用check_shell_special_character_s检查参数，或不使用/bin/sh作为解释器"
+
+  - id: SEC-003
+    name: 代码加载函数外部输入检查
+    description: 检查外部输入作为require、load、loadfile、dofile、loadstring等函数参数时是否进行白名单校验
+    severity: error
+    sceneMatch: 适用于所有Lua源代码文件
+    dataFilter: 搜索require、load、loadfile、dofile、loadstring函数调用
+    judgmentCondition: 如果发现外部输入直接作为这些函数的参数且未进行白名单校验，则判定为严重安全问题
+    examples:
+      - code: "local module = require(user_input)"
+        problem: 外部输入直接作为require参数，存在代码注入风险
+        language: lua
+      - code: |
+          local allowed_modules = {module1 = true, module2 = true}
+          if allowed_modules[user_input] then
+              require(user_input)
+          end
+        problem: 正确示例，进行白名单校验
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现代码加载函数使用外部输入：{code}"
+    suggestion: "对参数进行白名单校验，确保只加载允许的模块或文件"
+
+  - id: SEC-004
+    name: SQL注入检查
+    description: 检查执行自定义SQL语句是否进行预编译
+    severity: error
+    sceneMatch: 适用于涉及数据库操作的Lua代码
+    dataFilter: 搜索db:exec执行自定义SQL语句，检查是否拼接外部输入
+    judgmentCondition: 如果发现SQL语句拼接外部输入但未进行预编译，则判定为问题
+    examples:
+      - code: |
+          local cmd = 'select * from tb_test where level = ' .. level
+          db:exec(cmd)
+        problem: SQL语句拼接外部输入，存在SQL注入风险
+        language: lua
+      - code: |
+          local cmd = 'select * from tb_test where level = ?'
+          local vm = db:prepare(cmd)
+          vm:bind_values(level)
+          vm:step()
+          vm:finalize()
+        problem: 正确示例，使用预编译
+        language: lua
+    exceptions:
+      - scenario: SQL语句硬编码
+        reason: 如果SQL语句全部硬编码不包含外部输入，可以不预编译
+    messageTemplate: "在 {file}:{line} 发现SQL注入风险：{code}"
+    suggestion: "使用db:prepare预编译SQL语句，通过bind_values绑定参数"
+
+  - id: SEC-005
+    name: skynet.sleep浮点数检查
+    description: 检查skynet.sleep函数入参是否为整数
+    severity: error
+    sceneMatch: 适用于所有Lua源代码文件
+    dataFilter: 搜索skynet.sleep函数调用
+    judgmentCondition: 如果发现skynet.sleep的参数是浮点数（使用/而非//），则判定为问题
+    examples:
+      - code: "skynet.sleep(ms / 10)"
+        problem: skynet.sleep参数是浮点数，会抛出异常
+        language: lua
+      - code: "skynet.sleep(ms // 10)"
+        problem: 正确示例，使用//确保参数为整数
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现skynet.sleep使用浮点数：{code}"
+    suggestion: "使用//整除运算确保参数为整数"
+
+  # ========== 安全编码 - 文件操作 ==========
+  - id: SEC-006
+    name: 文件权限属主检查
+    description: 检查创建文件或目录之后是否显式修改文件或目录的权限和属主
+    severity: error
+    sceneMatch: 适用于所有Lua源代码文件
+    dataFilter: 搜索文件创建操作（如io.open、utils.write_file等），检查后续是否修改权限和属主
+    judgmentCondition: 如果发现创建文件或目录后未显式设置权限和属主，则判定为问题
+    examples:
+      - code: |
+          local f = io.open('/tmp/config.json', 'w')
+          f:write(data)
+          f:close()
+        problem: 创建文件后未设置权限和属主
+        language: lua
+      - code: |
+          local f = io.open('/tmp/config.json', 'w')
+          f:write(data)
+          f:close()
+          utils.chmod_s('/tmp/config.json', 0600)
+          utils.chown_s('/tmp/config.json', 0, 0)
+        problem: 正确示例，设置权限和属主
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现创建文件后未设置权限和属主：{code}"
+    suggestion: "创建文件或目录后使用chmod_s和chown_s设置权限和属主"
+
+  - id: SEC-007
+    name: 文件路径安全检查
+    description: 检查对于路径外部可控的文件进行任何操作前是否校验路径是否合法
+    severity: error
+    sceneMatch: 适用于所有Lua源代码文件
+    dataFilter: 搜索文件操作函数（io.open、os.remove、utils.copy等）且参数可能外部可控的代码
+    judgmentCondition: 如果发现对可能外部可控的文件路径进行操作前未使用check_real_path_s等安全函数校验，则判定为问题
+    examples:
+      - code: |
+          function export_event(list, path)
+              utils.remove(path)
+          end
+        problem: 未对path进行安全校验就删除
+        language: lua
+      - code: |
+          function export_event(list, path)
+              if check_realpath_before_open_s(path, '/tmp') ~= 0 then
+                  return
+              end
+              utils.remove(path)
+          end
+        problem: 正确示例，先进行路径校验
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现文件操作未进行安全校验：{code}"
+    suggestion: "使用check_real_path_s、check_realpath_before_open_s等安全函数校验路径"
+
+  - id: SEC-008
+    name: 解压缩包安全检查
+    description: 检查解压缩包操作是否进行完备的校验，防止zip炸弹
+    severity: error
+    sceneMatch: 适用于所有Lua源代码文件
+    dataFilter: 搜索解压操作，如使用系统命令unzip、tar或Lua解压库
+    judgmentCondition: 如果发现解压操作未使用框架提供的安全解压接口（secure_tar_unzip、unzip_s），则判定为问题
+    examples:
+      - code: "os.execute('unzip file.zip')"
+        problem: 直接使用unzip命令，存在zip炸弹风险
+        language: lua
+      - code: |
+          local ok = utils.secure_tar_unzip(file_path, dest_path, max_unzip_file_size, max_file_num)
+          if not ok then
+              log:error('secure_tar_unzip failed')
+          end
+        problem: 正确示例，使用安全解压接口
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现不安全的解压操作：{code}"
+    suggestion: "使用框架提供的secure_tar_unzip或unzip_s安全解压接口"
+
+  - id: SEC-009
+    name: 并发解压检查
+    description: 检查往同一路径下解压文件是否做了重入判断，禁止允许并发解压
+    severity: error
+    sceneMatch: 适用于所有Lua源代码文件
+    dataFilter: 搜索解压操作，检查是否有并发控制
+    judgmentCondition: 如果发现同一路径下可能并发解压且无重入保护，则判定为问题
+    examples:
+      - code: |
+          function unzip_file(file_path, dest_path)
+              utils.unzip_s(file_path, dest_path, max_size, max_num)
+          end
+        problem: 无重入保护，可能并发解压同一目录
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现可能并发解压：{code}"
+    suggestion: "添加解压锁或重入判断，禁止同一目录并发解压"
+
+  - id: SEC-010
+    name: 导入文件属主检查
+    description: 检查使用外部导入的文件之前是否判断文件属主是否与执行导入操作的用户一致
+    severity: error
+    sceneMatch: 适用于涉及文件导入的Lua代码
+    dataFilter: 搜索文件导入操作，检查是否验证文件属主
+    judgmentCondition: 如果发现导入外部文件前未检查文件属主与当前用户是否一致，则判定为问题
+    examples:
+      - code: |
+          function import_config(file_path)
+              local data = utils.read_file(file_path)
+          end
+        problem: 未检查文件属主
+        language: lua
+      - code: |
+          function import_config(file_path)
+              local uid = get_uid_gid_by_name(ctx)
+              local file_owner = utils_core.stat_s(file_path).st_uid
+              if file_owner ~= uid then
+                  return
+              end
+              local data = utils.read_file(file_path)
+          end
+        problem: 正确示例，检查文件属主
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现导入文件未检查属主：{code}"
+    suggestion: "使用stat_s获取文件属主，与当前用户uid比较"
+
+  - id: SEC-011
+    name: 共享目录临时文件检查
+    description: 检查是否在共享目录中创建和存放临时文件
+    severity: error
+    sceneMatch: 适用于所有Lua源代码文件
+    dataFilter: 搜索在/tmp等共享目录创建临时文件的代码
+    judgmentCondition: 如果发现直接在共享目录创建程序使用的临时文件，则判定为问题
+    examples:
+      - code: "local f = io.open('/tmp/temp_data.json', 'w')"
+        problem: 在共享目录/tmp创建临时文件
+        language: lua
+      - code: |
+          -- 先拷贝到非共享目录
+          utils.copy_file_s('/tmp/upload.json', '/data/upload.json')
+          local f = io.open('/data/upload.json', 'r')
+        problem: 正确示例，拷贝到非共享目录再处理
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现在共享目录创建临时文件：{code}"
+    suggestion: "将临时文件先拷贝到/data或/dev/shm等非共享目录再处理"
+
+  # ========== 安全编码 - 外部输入 ==========
+  - id: SEC-012
+    name: 外部输入循环上限检查
+    description: 检查是否禁止外部输入直接作为循环上限
+    severity: error
+    sceneMatch: 适用于所有Lua源代码文件
+    dataFilter: 搜索for循环，上限使用可能外部可控的变量
+    judgmentCondition: 如果发现循环上限直接使用外部输入且未限制范围，则判定为问题
+    examples:
+      - code: |
+          for i = 1, user_input_count do
+              -- process
+          end
+        problem: 外部输入直接作为循环上限，可能导致范围过大
+        language: lua
+      - code: |
+          local count = math.min(user_input_count, MAX_LIMIT)
+          for i = 1, count do
+              -- process
+          end
+        problem: 正确示例，限制循环上限
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现外部输入作为循环上限：{code}"
+    suggestion: "对外部输入进行范围限制后再作为循环上限"
+
+  - id: SEC-013
+    name: 外部输入除数检查
+    description: 检查是否禁止外部输入直接作为除数
+    severity: error
+    sceneMatch: 适用于所有Lua源代码文件
+    dataFilter: 搜索除法和取余运算，除数可能外部可控的代码
+    judgmentCondition: 如果发现除数直接使用外部输入且未检查是否为0，则判定为问题
+    examples:
+      - code: "local result = value / user_input"
+        problem: 外部输入直接作为除数，可能为0导致异常
+        language: lua
+      - code: |
+          if user_input == 0 then
+              return
+          end
+          local result = value / user_input
+        problem: 正确示例，先检查除数
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现外部输入作为除数：{code}"
+    suggestion: "先检查除数是否为0，再进行运算"
+
+  - id: SEC-014
+    name: 外部输入表索引检查
+    description: 检查外部输入作为表索引时对索引结果是否判空后再使用
+    severity: error
+    sceneMatch: 适用于所有Lua源代码文件
+    dataFilter: 搜索使用可能外部可控的变量作为表索引的代码
+    judgmentCondition: 如果发现外部输入作为表索引但对索引结果未判空就使用，则判定为问题
+    examples:
+      - code: |
+          function func(type)
+              self.handler_func = handlers[type].func
+          end
+        problem: 应该对handlers[type]判空后再使用
+        language: lua
+      - code: |
+          function func(type)
+              local handler = handlers[type]
+              if not handler then
+                  return
+              end
+              self.handler_func = handler.func
+          end
+        problem: 正确示例，先判空
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现外部输入作为表索引未判空：{code}"
+    suggestion: "先获取索引结果并判空，确认存在后再访问"
+
+  - id: SEC-015
+    name: 外部输入日志打印检查
+    description: 检查公共函数中是否日志打印可能是外部输入的参数取值
+    severity: warning
+    sceneMatch: 适用于公共函数和库代码
+    dataFilter: 搜索公共函数中的日志打印，检查参数是否可能包含外部输入
+    judgmentCondition: 如果发现公共函数直接打印可能外部输入的参数值，则判定为问题
+    examples:
+      - code: |
+          function check_path(path)
+              log:info('checking path: ' .. path)
+              -- check
+          end
+        problem: 公共函数打印外部输入参数，可能泄露敏感信息
+        language: lua
+    exceptions:
+      - scenario: 调试日志级别
+        reason: 如果是debug级别日志且可配置关闭，风险较低
+    messageTemplate: "在 {file}:{line} 发现打印可能的外部输入：{code}"
+    suggestion: "避免在公共函数中直接打印外部输入参数，或使用脱敏处理"
+
+  - id: SEC-016
+    name: 外部输入校验检查
+    description: 检查对于外部输入进行直接校验，不要对二次计算后的结果进行间接校验
+    severity: error
+    sceneMatch: 适用于所有Lua源代码文件
+    dataFilter: 搜索对外部输入运算后的结果进行校验的代码
+    judgmentCondition: 如果发现对外部输入的运算结果进行校验而非直接校验输入本身，则判定为问题
+    examples:
+      - code: |
+          if data_len > msg_len then
+              return -1
+          end
+          -- data_len = sizeof(MSG_INFO_S) + data_cnt * sizeof(Data_S)
+        problem: 对运算结果校验，可能被整数溢出绕过
+        language: lua
+      - code: |
+          if data_cnt > MAX_COUNT then
+              return -1
+          end
+          local data_len = sizeof(MSG_INFO_S) + data_cnt * sizeof(Data_S)
+          if data_len > msg_len then
+              return -1
+          end
+        problem: 正确示例，先直接校验输入
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现对运算结果校验：{code}"
+    suggestion: "直接对外部输入进行校验，避免整数溢出等问题"
+
+  # ========== 安全编码 - 敏感信息 ==========
+  - id: SEC-017
+    name: 敏感信息明文泄露检查
+    description: 检查敏感信息是否明文泄露到日志、接口响应、UI界面、文件系统或数据库
+    severity: error
+    sceneMatch: 适用于所有Lua源代码文件和JSON配置文件
+    dataFilter: 搜索可能包含敏感信息的代码，如password、token、secret、key等关键词
+    judgmentCondition: 如果发现敏感信息明文打印到日志、返回到接口响应、显示在UI、存储到文件或数据库，则判定为问题
+    examples:
+      - code: "log:info('user password: ' .. user.password)"
+        problem: 敏感信息明文打印到日志
+        language: lua
+      - code: "log:info('user login success')"
+        problem: 正确示例，不记录敏感信息
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现敏感信息明文泄露：{code}"
+    suggestion: "不要在日志、响应、UI、文件或数据库中明文存储敏感信息，使用脱敏或加密"
+
+  - id: SEC-018
+    name: 敏感信息Sensitive标识检查
+    description: 检查北向接口映射器配置中，对于可能是敏感信息的请求参数是否增加Sensitive标识
+    severity: error
+    sceneMatch: 适用于mapping_config JSON配置文件
+    dataFilter: 搜索mapping_config中ReqBody定义的参数，检查敏感信息参数是否有Sensitive标识
+    judgmentCondition: "如果发现Password、Token、Secret等敏感信息参数未设置Sensitive: true，则判定为问题"
+    examples:
+      - code: |
+          "ReqBody": [
+              {
+                  "Name": "SenderPassword",
+                  "Type": "string"
+              }
+          ]
+        problem: 密码参数未设置Sensitive标识
+        language: json
+      - code: |
+          "ReqBody": [
+              {
+                  "Name": "SenderPassword",
+                  "Type": "string",
+                  "Sensitive": true
+              }
+          ]
+        problem: 正确示例，设置Sensitive标识
+        language: json
+    messageTemplate: "在 {file}:{line} 发现敏感信息参数缺少Sensitive标识：{code}"
+    suggestion: "为敏感信息参数添加Sensitive: true标识"
+
+  - id: SEC-019
+    name: 错误消息敏感信息检查
+    description: 检查后台组件错误引擎抛错时是否在message中返回敏感信息
+    severity: error
+    sceneMatch: 适用于所有Lua源代码文件
+    dataFilter: 搜索error函数调用，检查参数是否可能包含敏感信息
+    judgmentCondition: 如果发现error函数的参数可能是敏感信息（如URL、密码等），则判定为问题
+    examples:
+      - code: |
+          if url:len() > 255 then
+              error(base_messages.PropertyValueFormatError(url, '%Url'))
+          end
+        problem: url可能是敏感信息，直接传入会泄露
+        language: lua
+      - code: |
+          if url:len() > 255 then
+              error(base_messages.PropertyValueFormatError('******', '%Url'))
+          end
+        problem: 正确示例，使用******替代敏感信息
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现错误消息包含敏感信息：{code}"
+    suggestion: "使用******或脱敏后的值替代敏感信息"
+
+  # ========== 安全编码 - 资源泄露 ==========
+  - id: SEC-020
+    name: C库内存释放检查
+    description: 检查C库中是否保证内存正确释放
+    severity: error
+    sceneMatch: 适用于C/C++源代码文件
+    dataFilter: 搜索C库函数中malloc、calloc、new等内存分配，检查是否有对应释放
+    judgmentCondition: 如果发现C库中分配的内存未在所有路径上释放，则判定为问题
+    examples:
+      - code: |
+          char* buf = malloc(size);
+          if (error) {
+              return -1;  // buf未释放
+          }
+          // use buf
+          free(buf);
+        problem: 错误路径未释放内存
+        language: c
+    messageTemplate: "在 {file}:{line} 发现可能内存泄露：{code}"
+    suggestion: "确保所有返回路径都释放分配的内存"
+
+  - id: SEC-021
+    name: 开源软件资源释放检查
+    description: 检查是否正确调用开源软件的资源申请和释放函数
+    severity: error
+    sceneMatch: 适用于使用开源软件的Lua和C代码
+    dataFilter: 搜索开源库函数调用，检查资源释放是否配套
+    judgmentCondition: 如果发现调用了资源申请函数但未调用对应的释放函数，则判定为问题
+    examples:
+      - code: |
+          local ssl = ssl_ctx_new()
+          -- use ssl
+          -- ssl_ctx_free未调用
+        problem: 调用SSL_CTX_new但未调用SSL_CTX_free
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现资源未正确释放：{code}"
+    suggestion: "确保资源申请后调用对应的释放函数"
+
+  # ========== 安全编码 - 其他 ==========
+  - id: SEC-022
+    name: 阻塞性C库检查
+    description: 检查是否禁止封装会调用到阻塞性API的C库给Lua代码直接调用
+    severity: error
+    sceneMatch: 适用于C/C++源代码文件
+    dataFilter: 搜索导出到Lua的C函数，检查是否调用阻塞性API（sleep、accept、recv、send等）
+    judgmentCondition: 如果发现导出到Lua的C函数直接调用阻塞性API，则判定为问题
+    examples:
+      - code: |
+          static int lua_my_sleep(lua_State* L) {
+              int sec = luaL_checkinteger(L, 1);
+              sleep(sec);  // 阻塞性API
+              return 0;
+          }
+        problem: C函数直接调用阻塞性sleep
+        language: c
+    messageTemplate: "在 {file}:{line} 发现阻塞性API调用：{code}"
+    suggestion: "使用框架提供的worker库，将阻塞操作在worker线程中执行"
+
+  - id: SEC-023
+    name: 长时间shell脚本检查
+    description: 检查是否禁止在Lua代码中直接调用执行时间较长的shell脚本
+    severity: error
+    sceneMatch: 适用于所有Lua源代码文件
+    dataFilter: 搜索vos.system_s调用，检查执行的脚本是否可能耗时较长
+    judgmentCondition: 如果发现直接执行可能耗时较长的shell脚本（如配置网络、解压大文件），则判定为问题
+    examples:
+      - code: "vos.system_s('/bin/sh', '-c', 'network_config.sh')"
+        problem: 直接执行可能耗时的网络配置脚本
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现执行可能耗时的shell脚本：{code}"
+    suggestion: "使用框架提供的worker机制执行耗时shell脚本"
+
+  - id: SEC-024
+    name: 启动函数耗时操作检查
+    description: 检查是否禁止在app启动函数中执行耗时较长或者耗时不确定的操作
+    severity: error
+    sceneMatch: 适用于app启动相关Lua代码
+    dataFilter: 搜索app启动函数，检查是否有阻塞性等待或耗时操作
+    judgmentCondition: 如果发现启动函数中有耗时较长或不确定的操作（如阻塞性等待其他组件接口），则判定为问题
+    examples:
+      - code: |
+          function app.start()
+              skynet.call('other_service', 'lua', 'get_ready')  -- 阻塞等待
+          end
+        problem: 启动函数中阻塞性等待其他服务
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现启动函数中有耗时操作：{code}"
+    suggestion: "将耗时操作改为异步执行，不阻塞启动过程"
+
+  - id: SEC-025
+    name: 协程创建数量控制检查
+    description: 检查创建skynet协程操作外部可控时是否控制协程创建的最大数量
+    severity: error
+    sceneMatch: 适用于所有Lua源代码文件
+    dataFilter: 搜索skynet.fork调用，检查创建数量是否外部可控
+    judgmentCondition: 如果发现skynet.fork创建数量外部可控且无最大数量限制，则判定为问题
+    examples:
+      - code: |
+          for _, item in pairs(user_list) do
+              skynet.fork(process_item, item)
+          end
+        problem: user_list外部可控，可能创建过多协程
+        language: lua
+      - code: |
+          for i, item in pairs(user_list) do
+              if i >= MAX_CONCURRENT then
+                  break
+              end
+              skynet.fork(process_item, item)
+          end
+        problem: 正确示例，限制最大并发数
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现协程创建数量外部可控：{code}"
+    suggestion: "限制最大协程创建数量，防止DOS攻击"
+
+  - id: SEC-026
+    name: 外部可控操作内存分配检查
+    description: 检查如果某个外部可控的操作存在较多内存分配，是否保证及时GC
+    severity: warning
+    sceneMatch: 适用于所有Lua源代码文件
+    dataFilter: 搜索可能外部可控且涉及大量内存分配的操作
+    judgmentCondition: 如果发现外部可控操作有大量内存分配且结束后未主动GC，则判定为问题
+    examples:
+      - code: |
+          function import_bios_config(config_list)
+              for _, config in pairs(config_list) do
+                  -- 大量内存分配
+              end
+              -- 未主动GC
+          end
+        problem: 外部可控的导入操作有大量内存分配但未主动GC
+        language: lua
+      - code: |
+          function import_bios_config(config_list)
+              for _, config in pairs(config_list) do
+                  -- 大量内存分配
+              end
+              collectgarbage()
+          end
+        problem: 正确示例，主动触发GC
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现外部可控操作未及时GC：{code}"
+    suggestion: "在操作结束后添加collectgarbage()调用（需sig例会评审通过）"
+
+  # ========== 异常处理 ==========
+  - id: AST-001
+    name: 正式代码断言检查
+    description: 检查正式代码是否禁止使用断言
+    severity: error
+    sceneMatch: 适用于所有非测试的Lua源代码文件
+    dataFilter: 搜索assert和error函数调用（非错误引擎相关代码）
+    judgmentCondition: 如果发现正式代码中使用assert或error（非错误引擎场景），则判定为问题
+    examples:
+      - code: "assert(result ~= nil, 'result cannot be nil')"
+        problem: 正式代码使用assert断言
+        language: lua
+      - code: |
+          local ok, err = pcall(function()
+              -- 可能抛异常的操作
+          end)
+          if not ok then
+              -- handle error
+          end
+        problem: 正确示例，使用pcall处理异常
+        language: lua
+    exceptions:
+      - scenario: 错误引擎机制
+        reason: 错误引擎机制依赖error函数，可以使用
+      - scenario: 集成测试和单元测试
+        reason: 测试代码中允许使用assert和error
+    messageTemplate: "在 {file}:{line} 发现正式代码使用断言：{code}"
+    suggestion: "使用pcall或xpcall捕获异常，而非assert断言"
+
+  - id: AST-002
+    name: 异常处理混用检查
+    description: 检查函数的异常处理是否混用return和抛异常两种方法
+    severity: warning
+    sceneMatch: 适用于所有Lua源代码文件
+    dataFilter: 搜索函数定义，检查是否同时使用return返回错误和error抛异常
+    judgmentCondition: 如果发现同一函数在不同情况下混用return返回错误和error抛异常，则判定为问题
+    examples:
+      - code: |
+          function process(data)
+              if not data then
+                  return nil, 'data is nil'
+              end
+              if data.invalid then
+                  error('data is invalid')
+              end
+          end
+        problem: 函数混用return和error处理异常
+        language: lua
+    messageTemplate: "在 {file}:{line} 发现异常处理混用：{code}"
+    suggestion: "统一使用return或error处理异常，不要混用"
+
+  # ========== SR配置 ==========
+  - id: SR-001
+    name: string.format表达式参数检查
+    description: 检查string.format的参数是否使用表达式
+    severity: error
+    sceneMatch: 适用于SR配置JSON文件
+    dataFilter: 搜索SR配置中string.format的|>管道操作
+    judgmentCondition: 如果发现string.format的参数为表达式（如expr($1 * 2)作为string.format参数），则判定为问题
+    examples:
+      - code: "\"Name\": \"${Slot} |> string.format('Cpu%sChannel0', $1 * 2)\""
+        problem: string.format参数使用表达式，应先用expr处理
+        language: json
+      - code: "\"Name\": \"${Slot} |> expr($1 * 2) |> string.format('Cpu%sChannel0', $1)\""
+        problem: 正确示例，将表达式结果作为string.format参数
+        language: json
+    messageTemplate: "在 {file}:{line} 发现string.format参数使用表达式：{code}"
+    suggestion: "先用expr管道处理表达式，再将结果作为string.format参数"

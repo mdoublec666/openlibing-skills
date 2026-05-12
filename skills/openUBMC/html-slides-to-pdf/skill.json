@@ -1,0 +1,5 @@
+{
+  "name": "html-slides-to-pdf",
+  "version": "1.0.0",
+  "description": "使用 HTML-first 工作流制作演示幻灯片并导出为 PDF。每页一个 HTML 文件，共享 common.css，通过预览页迭代调整，最终用 Puppeteer + pdf-lib 合并导出。适用于用户要求制作华为风/汇报风幻灯片并导出 PDF，或要求将已有 HTML slides 转成 PDF 时。"
+}

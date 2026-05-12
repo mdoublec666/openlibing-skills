@@ -1,0 +1,13 @@
+{
+  "name": "gitcode",
+  "version": "1.0.0",
+  "description": "GitCode 平台 API v5 通用操作技能",
+  "author": "OpenUBMC Team",
+  "license": "MulanPSL-2.0",
+  "files": ["SKILL.md"],
+  "keywords": ["gitcode", "api", "pr", "issue"],
+  "categories": ["devops"],
+  "usage": {
+    "prompts": ["GitCode", "PR", "issue", "合并", "检视"]
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "openubmc-pr-monitor",
+  "version": "1.0.0",
+  "description": "OpenUBMC 组织通用 PR 监控与审核技能",
+  "author": "OpenUBMC Team",
+  "license": "MulanPSL-2.0",
+  "files": ["SKILL.md"],
+  "keywords": ["pr", "issue", "review", "openubmc"],
+  "categories": ["devops"],
+  "usage": {
+    "prompts": ["PR 监控", "审核 PR", "Issue 修复", "PR 合并"]
+  }
+}

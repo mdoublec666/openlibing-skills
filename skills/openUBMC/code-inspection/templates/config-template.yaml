@@ -1,0 +1,50 @@
+# Code Inspection 配置文件示例
+# 将此文件放置在项目根目录，命名为 .inspection.yaml
+
+# 规则文件列表（支持本地路径和远程 URL）
+# 多个规则文件会按顺序合并，相同 id 的规则后者覆盖前者
+rules:
+  # 使用本地规则文件
+  - ./rules/custom-rules.yaml
+  
+  # 使用远程规则文件
+  # - https://example.com/shared-rules.yaml
+  
+  # 使用内置规则（相对于 skill 目录）
+  # - rules/security-rules.yaml
+  # - rules/quality-rules.yaml
+
+# 排除特定规则（通过规则 id）
+excludeRules:
+  - EX-001  # 排除调试打印检查
+  # - EX-002  # 排除 TODO 注释检查
+
+# 输出配置
+output:
+  # 输出格式：markdown | json
+  format: markdown
+  
+  # 输出路径（相对于项目根目录）
+  path: ./inspection_report.md
+
+# 扫描配置
+scan:
+  # 包含的文件模式（glob 格式）
+  include:
+    - "**/*.lua"
+    - "**/*.py"
+    - "**/*.js"
+  
+  # 排除的文件模式
+  exclude:
+    - "**/test/**"
+    - "**/tests/**"
+    - "**/vendor/**"
+    - "**/node_modules/**"
+    - "**/*.min.js"
+  
+  # 最大扫描文件数
+  maxFiles: 10000
+  
+  # 扫描超时时间（毫秒）
+  timeout: 300000

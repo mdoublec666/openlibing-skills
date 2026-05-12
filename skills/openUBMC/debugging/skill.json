@@ -1,0 +1,49 @@
+{
+  "name": "openubmc-debugging",
+  "version": "1.3.0",
+  "description": "调试 openUBMC 的 Systemd、Skynet、MDB/D-Bus 和 ASAN 问题，用于服务启动失败、资源接口异常、协程或 task 异常、内存泄漏排查。",
+  "author": "OpenUBMC Team",
+  "license": "MulanPSL-2.0",
+  "openubmc": {
+    "minVersion": "1.0.0",
+    "maxVersion": "2.0.0",
+    "components": ["systemd", "skynet", "dbus", "journalctl", "asan", "mc.tasks"]
+  },
+  "dependencies": {
+    "systemd": ">=245",
+    "dbus": ">=1.12",
+    "skynet": ">=1.0.0"
+  },
+  "files": [
+    "SKILL.md",
+    "skill.json"
+  ],
+  "keywords": [
+    "debugging",
+    "systemd",
+    "skynet",
+    "dbus",
+    "mdb",
+    "asan",
+    "mc.tasks",
+    "journalctl",
+    "troubleshooting",
+    "openubmc"
+  ],
+  "categories": [
+    "debugging",
+    "operations"
+  ],
+  "usage": {
+    "prompts": [
+      "服务启动失败",
+      "MDB或D-Bus接口访问失败",
+      "Skynet服务调试",
+      "Lua协程或mc.tasks异常",
+      "ASAN内存泄漏排查",
+      "日志分析",
+      "systemctl排查",
+      "journalctl查日志"
+    ]
+  }
+}

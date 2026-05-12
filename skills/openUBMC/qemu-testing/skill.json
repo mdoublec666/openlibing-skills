@@ -1,0 +1,42 @@
+{
+  "name": "openubmc-qemu-testing",
+  "version": "1.2.0",
+  "description": "处理 openUBMC 的 QEMU 启动、冒烟验证和 skynet coredump 排查。",
+  "author": "OpenUBMC Team",
+  "license": "MulanPSL-2.0",
+  "openubmc": {
+    "minVersion": "1.0.0",
+    "maxVersion": "2.0.0",
+    "components": ["qemu", "skynet", "smoke-test", "troubleshooting"]
+  },
+  "dependencies": {
+    "qemu-system-arm": ">=6.0.0"
+  },
+  "files": [
+    "SKILL.md",
+    "skill.json"
+  ],
+  "keywords": [
+    "qemu",
+    "skynet",
+    "smoke-test",
+    "coredump",
+    "resource",
+    "troubleshooting",
+    "openubmc"
+  ],
+  "categories": [
+    "testing",
+    "troubleshooting"
+  ],
+  "usage": {
+    "prompts": [
+      "Qemu怎么启动",
+      "Qemu冒烟测试",
+      "Qemu启动后Web不通",
+      "skynet持续coredump",
+      "SSH通但Web不通",
+      "QEMU环境调试"
+    ]
+  }
+}

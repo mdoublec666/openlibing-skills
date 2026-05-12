@@ -1,0 +1,55 @@
+{
+  "name": "code-inspection",
+  "version": "1.1.0",
+  "description": "通用代码排查技能，支持加载规则清单进行代码静态分析。支持规则编码、场景匹配（代码仓类型、开发语言）、数据筛选（文件名、关键词）、判定条件等维度，输出结构化排查报告。支持生成规则模板和样例规则。",
+  "author": "OpenUBMC Team",
+  "license": "MulanPSL-2.0",
+  "files": [
+    "SKILL.md",
+    "skill.json",
+    "rules/rules.schema.json",
+    "templates/report-template.md",
+    "templates/config-template.yaml",
+    "templates/rule-template.yaml"
+  ],
+  "keywords": [
+    "code-inspection",
+    "static-analysis",
+    "code-review",
+    "rule-based",
+    "linting",
+    "security-check",
+    "quality-check"
+  ],
+  "categories": [
+    "code-quality",
+    "security",
+    "automation"
+  ],
+  "usage": {
+    "prompts": [
+      "代码排查",
+      "静态分析",
+      "规则检查",
+      "代码审查",
+      "代码规范检查",
+      "加载规则清单",
+      "生成排查报告",
+      "生成规则模板",
+      "生成规则清单",
+      "安全检查",
+      "质量检查",
+      "使用自定义规则排查",
+      "加载远程规则",
+      "合并多个规则文件"
+    ]
+  },
+  "configuration": {
+    "outputFormat": "markdown",
+    "maxFiles": 10000,
+    "timeout": 300000,
+    "configFileName": ".inspection.yaml",
+    "ruleFileExtensions": [".yaml", ".yml"],
+    "supportedSources": ["local", "url", "cli", "config"]
+  }
+}

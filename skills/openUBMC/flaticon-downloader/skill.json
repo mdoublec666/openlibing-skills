@@ -1,0 +1,5 @@
+{
+  "name": "flaticon-downloader",
+  "version": "1.0.0",
+  "description": "Search, select, and download icons from Flaticon for PPT and design projects. Use Claude's WebSearch tool to find icons, then download them directly from CDN. Supports batch download with style consistency. Use this skill when the user needs to find and download icons, especially for presentations."
+}
